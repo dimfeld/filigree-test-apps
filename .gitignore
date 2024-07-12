@@ -1,0 +1,13 @@
+queue.db
+target
+storage
+
+debug/
+target/
+**/*.rs.bk
+*.pdb
+.DS_Store
+/target
+.env
+node_modules
+pnpm-lock.yaml

@@ -1,0 +1,325 @@
+CREATE OR REPLACE FUNCTION objectid_to_uuid (text)
+  RETURNS uuid
+  LANGUAGE sql
+  IMMUTABLE
+  RETURNS NULL ON NULL INPUT PARALLEL SAFE
+  AS $$
+  SELECT
+    encode(decode(replace(replace(
+	  RIGHT ($1, 22), '-', '+'), '_', '/') ||
+	    '==', 'base64'), 'hex')::uuid
+$$;
+
+CREATE OR REPLACE FUNCTION uuid_to_objectid (uuid)
+  RETURNS text
+  LANGUAGE sql
+  IMMUTABLE
+  RETURNS NULL ON NULL INPUT PARALLEL SAFE
+  AS $$
+  SELECT
+    replace(replace(
+      LEFT (encode(decode(replace($1::text, '-', ''), 'hex'),
+	'base64'), 22), '+', '-'), '/', '_')
+$$;
+
+
+CREATE TABLE IF NOT EXISTS public.delete_log (
+  organization_id UUID NOT NULL,
+  object_id uuid NOT NULL,
+  object_type text NOT NULL,
+  data jsonb NOT NULL,
+  deleted_at timestamptz NOT NULL DEFAULT now()
+);
+
+
+CREATE TABLE public.users (
+  id uuid NOT NULL PRIMARY KEY,
+  organization_id uuid,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  name text NOT NULL,
+  password_hash text,
+  email text UNIQUE,
+  avatar_url text
+);
+
+CREATE INDEX users_organization_id ON public.users (organization_id);
+
+
+CREATE TABLE public.organizations (
+  id uuid NOT NULL PRIMARY KEY,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  name text NOT NULL,
+  owner UUID REFERENCES public.users (id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE,
+  default_role uuid,
+  active boolean NOT NULL DEFAULT TRUE
+);
+
+
+CREATE TABLE public.roles (
+  id uuid NOT NULL PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES public.organizations (id) ON DELETE CASCADE,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  name text NOT NULL,
+  description text
+);
+
+CREATE INDEX roles_organization_id ON public.roles (organization_id);
+
+
+CREATE TABLE public.reports (
+  id uuid NOT NULL PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES public.organizations (id) ON DELETE CASCADE,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  title text NOT NULL,
+  description text,
+  ui jsonb NOT NULL
+);
+
+CREATE INDEX reports_organization_id ON public.reports (organization_id);
+
+CREATE INDEX reports_updated_at ON public.reports (organization_id, updated_at DESC);
+
+CREATE INDEX reports_created_at ON public.reports (organization_id, created_at DESC);
+
+
+CREATE TABLE public.report_sections (
+  id uuid NOT NULL PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES public.organizations (id) ON DELETE CASCADE,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  name text NOT NULL,
+  viz text NOT NULL,
+  options jsonb NOT NULL,
+  report_id uuid NOT NULL REFERENCES public.reports (id) ON DELETE CASCADE
+);
+
+CREATE INDEX report_sections_organization_id ON public.report_sections (organization_id);
+
+CREATE INDEX report_sections_report_id ON public.report_sections (organization_id, report_id);
+
+CREATE INDEX report_sections_updated_at ON public.report_sections (organization_id, updated_at DESC);
+
+CREATE INDEX report_sections_created_at ON public.report_sections (organization_id, created_at DESC);
+
+
+CREATE TABLE public.posts (
+  id uuid NOT NULL PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES public.organizations (id) ON DELETE CASCADE,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  subject text NOT NULL,
+  body text NOT NULL
+);
+
+CREATE INDEX posts_organization_id ON public.posts (organization_id);
+
+CREATE INDEX posts_updated_at ON public.posts (organization_id, updated_at DESC);
+
+CREATE INDEX posts_created_at ON public.posts (organization_id, created_at DESC);
+
+
+CREATE TABLE public.reactions (
+  id uuid NOT NULL PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES public.organizations (id) ON DELETE CASCADE,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  type TEXT NOT NULL,
+  post_id uuid NOT NULL REFERENCES public.posts (id) ON DELETE CASCADE
+);
+
+CREATE INDEX reactions_organization_id ON public.reactions (organization_id);
+
+CREATE INDEX reactions_post_id ON public.reactions (organization_id, post_id);
+
+CREATE INDEX reactions_updated_at ON public.reactions (organization_id, updated_at DESC);
+
+CREATE INDEX reactions_created_at ON public.reactions (organization_id, created_at DESC);
+
+
+CREATE TABLE public.post_images (
+  id uuid NOT NULL PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES public.organizations (id) ON DELETE CASCADE,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  file_storage_key text NOT NULL,
+  file_storage_bucket text NOT NULL,
+  file_original_name text,
+  file_size bigint,
+  file_hash bytea,
+  post_id uuid NOT NULL REFERENCES public.posts (id) ON DELETE CASCADE
+);
+
+CREATE INDEX post_images_organization_id ON public.post_images (organization_id);
+
+CREATE INDEX post_images_post_id ON public.post_images (organization_id, post_id);
+
+CREATE INDEX post_images_updated_at ON public.post_images (organization_id, updated_at DESC);
+
+CREATE INDEX post_images_created_at ON public.post_images (organization_id, created_at DESC);
+
+
+CREATE TABLE public.polls (
+  id uuid NOT NULL PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES public.organizations (id) ON DELETE CASCADE,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  question text NOT NULL,
+  answers jsonb NOT NULL,
+  post_id uuid NOT NULL UNIQUE REFERENCES public.posts (id) ON DELETE CASCADE
+);
+
+CREATE INDEX polls_organization_id ON public.polls (organization_id);
+
+CREATE INDEX polls_post_id ON public.polls (organization_id, post_id);
+
+CREATE INDEX polls_updated_at ON public.polls (organization_id, updated_at DESC);
+
+CREATE INDEX polls_created_at ON public.polls (organization_id, created_at DESC);
+
+
+CREATE TABLE public.comments (
+  id uuid NOT NULL PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES public.organizations (id) ON DELETE CASCADE,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  body text NOT NULL,
+  post_id uuid NOT NULL REFERENCES public.posts (id) ON DELETE CASCADE
+);
+
+CREATE INDEX comments_organization_id ON public.comments (organization_id);
+
+CREATE INDEX comments_post_id ON public.comments (organization_id, post_id);
+
+CREATE INDEX comments_updated_at ON public.comments (organization_id, updated_at DESC);
+
+CREATE INDEX comments_created_at ON public.comments (organization_id, created_at DESC);
+
+
+CREATE TABLE public.user_roles (
+  organization_id UUID NOT NULL REFERENCES
+    public.organizations (id) ON DELETE CASCADE DEFERRABLE INITIALLY
+    IMMEDIATE,
+  user_id UUID NOT NULL REFERENCES
+    public.users (id) ON DELETE CASCADE DEFERRABLE INITIALLY
+    IMMEDIATE,
+  role_id UUID NOT NULL REFERENCES
+    public.roles (id) ON DELETE CASCADE DEFERRABLE INITIALLY
+    IMMEDIATE,
+  PRIMARY KEY (organization_id, user_id, role_id)
+);
+
+CREATE TABLE public.user_sessions (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES
+    public.users (id) ON DELETE CASCADE,
+  hash uuid NOT NULL,
+  expires_at timestamptz NOT NULL
+);
+
+
+-- A list of users and what organizations they belong to. Users can potentially be in more than one organization.
+CREATE TABLE public.organization_members (
+  organization_id UUID NOT NULL REFERENCES
+    public.organizations (id) ON DELETE CASCADE DEFERRABLE INITIALLY
+    IMMEDIATE,
+  user_id UUID NOT NULL REFERENCES
+    public.users (id) ON DELETE CASCADE DEFERRABLE INITIALLY
+    IMMEDIATE,
+  active boolean NOT NULL DEFAULT TRUE,
+  PRIMARY KEY (organization_id, user_id)
+);
+
+CREATE INDEX user_sessions_user_id ON public.user_sessions (user_id);
+
+CREATE TABLE public.api_keys (
+  api_key_id uuid PRIMARY KEY,
+  hash bytea NOT NULL,
+  organization_id UUID NOT NULL REFERENCES
+    public.organizations (id) ON DELETE CASCADE,
+  user_id UUID REFERENCES
+    public.users (id) ON DELETE CASCADE,
+  inherits_user_permissions bool NOT NULL DEFAULT FALSE,
+  description text NOT NULL DEFAULT '',
+  active boolean NOT NULL DEFAULT TRUE,
+  expires_at timestamptz NOT NULL
+);
+
+-- Methods for a user to log in.
+CREATE TABLE public.email_logins (
+  email text PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES
+    public.users (id) ON DELETE CASCADE DEFERRABLE INITIALLY
+    IMMEDIATE,
+  verified bool NOT NULL,
+  reset_token uuid,
+  reset_expires_at timestamptz,
+  passwordless_login_token uuid,
+  passwordless_login_expires_at timestamptz
+);
+
+CREATE INDEX email_logins_user_id ON public.email_logins (user_id);
+
+CREATE TABLE public.oauth_logins (
+  oauth_provider text NOT NULL,
+  oauth_account_id text NOT NULL,
+  user_id UUID NOT NULL REFERENCES
+    public.users (id) ON DELETE CASCADE DEFERRABLE INITIALLY
+    IMMEDIATE,
+  PRIMARY KEY (oauth_provider, oauth_account_id)
+);
+
+CREATE INDEX oauth_logins_user_id ON public.oauth_logins (user_id);
+
+CREATE TABLE public.oauth_authorization_sessions (
+  key text PRIMARY KEY,
+  provider text NOT NULL,
+  pkce_verifier text,
+  add_to_user_id UUID,
+  redirect_to text,
+  expires_at timestamptz NOT NULL
+);
+
+CREATE TABLE public.user_invites (
+  email text NOT NULL,
+  token uuid NOT NULL,
+  token_expires_at timestamptz NOT NULL,
+  -- The person's name, if known.
+  name text,
+  -- The user that sent the invite
+  invited_by UUID,
+  -- The organization that the user will be added to. NULL indicates a new organization.
+  organization_id UUID,
+  -- The roles that the user will be added with, if inviting to an existing organization.
+  -- If omitted, the organization's default role will be used.
+  role_ids UUID[],
+  invite_sent_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX user_invites_email_org ON public.user_invites (email,
+  organization_id) NULLS NOT DISTINCT;
+
+
+
+
+CREATE TABLE public.permissions (
+  organization_id UUID NOT NULL REFERENCES
+    public.organizations (id) ON DELETE CASCADE,
+  -- user or role
+  actor_id UUID NOT NULL,
+  permission text NOT NULL,
+  PRIMARY KEY (organization_id, actor_id, permission)
+);
+
+
+CREATE TABLE public.object_permissions (
+  organization_id UUID NOT NULL REFERENCES
+    public.organizations (id) ON DELETE CASCADE,
+  actor_id UUID NOT NULL,
+  object_id uuid NOT NULL,
+  permission text NOT NULL,
+  PRIMARY KEY (organization_id, actor_id, object_id, permission)
+);
