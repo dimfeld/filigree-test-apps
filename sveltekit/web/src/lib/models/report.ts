@@ -17,24 +17,19 @@ export const ReportSchema = z.object({
 	title: z.string(),
 	description: z.string().optional(),
 	ui: z.any(),
-	_permission: ObjectPermission,
 });
 
 export type Report = z.infer<typeof ReportSchema>;
+export const ReportUserViewSchema = ReportSchema;
+export type ReportUserView = Report;
+export const ReportOwnerViewSchema = ReportSchema;
+export type ReportOwnerView = Report;
 export const ReportListResultSchema = ReportSchema;
 export type ReportListResult = Report;
+export const ReportSchema = ReportSchema;
+export type Report = Report;
 
-export const ReportCreatePayloadSchema = z.object({
-	id: z.string().optional(),
-	title: z.string(),
-	description: z.string().optional(),
-	ui: z.any(),
-	report_sections: ReportSectionCreatePayloadSchema.array().optional(),
-});
-
-export type ReportCreatePayload = z.infer<typeof ReportCreatePayloadSchema>;
-
-export const ReportPopulatedGetResultAndCreateResultSchema = z.object({
+export const ReportCreateResultSchema = z.object({
 	id: z.string(),
 	organization_id: z.string(),
 	updated_at: z.string().datetime(),
@@ -42,45 +37,10 @@ export const ReportPopulatedGetResultAndCreateResultSchema = z.object({
 	title: z.string(),
 	description: z.string().optional(),
 	ui: z.any(),
-	report_sections: ReportSectionSchema.array(),
-	_permission: ObjectPermission,
+	report_sections: ReportSectionCreatePayloadSchema.array(),
 });
 
-export type ReportPopulatedGetResultAndCreateResult = z.infer<
-	typeof ReportPopulatedGetResultAndCreateResultSchema
->;
-export const ReportPopulatedGetResultSchema =
-	ReportPopulatedGetResultAndCreateResultSchema;
-export type ReportPopulatedGetResult = ReportPopulatedGetResultAndCreateResult;
-export const ReportCreateResultSchema =
-	ReportPopulatedGetResultAndCreateResultSchema;
-export type ReportCreateResult = ReportPopulatedGetResultAndCreateResult;
-
-export const ReportPopulatedListResultSchema = z.object({
-	id: z.string(),
-	organization_id: z.string(),
-	updated_at: z.string().datetime(),
-	created_at: z.string().datetime(),
-	title: z.string(),
-	description: z.string().optional(),
-	ui: z.any(),
-	report_section_ids: z.string().array(),
-	_permission: ObjectPermission,
-});
-
-export type ReportPopulatedListResult = z.infer<
-	typeof ReportPopulatedListResultSchema
->;
-
-export const ReportUpdatePayloadSchema = z.object({
-	id: z.string().optional(),
-	title: z.string(),
-	description: z.string().optional(),
-	ui: z.any().optional(),
-	report_sections: ReportSectionUpdatePayloadSchema.array().optional(),
-});
-
-export type ReportUpdatePayload = z.infer<typeof ReportUpdatePayloadSchema>;
+export type ReportCreateResult = z.infer<typeof ReportCreateResultSchema>;
 
 export const baseUrl = "reports";
 export const urlWithId = (id: string) => `${baseUrl}/${id}`;

@@ -6,13 +6,14 @@ use filigree::{
         users::add_user_email_login,
     },
 };
+use sea_orm::IntoActiveValue;
 use sqlx::{PgConnection, PgPool};
 
 use crate::{
     models::{
         organization::OrganizationId,
         role::{self, RoleId},
-        user::{UserCreatePayload, UserId},
+        user::{self, UserId},
     },
     users::{
         organization::create_new_organization, users::create_new_user_with_prehashed_password,
@@ -70,9 +71,12 @@ pub async fn bootstrap(db: PgPool, data: BootstrapData) -> Result<bool, Report<E
     )
     .await?;
 
-    let user_details = UserCreatePayload {
-        name: data.admin_name.unwrap_or_else(|| "Admin".to_string()),
-        email: Some(data.admin_email.clone()),
+    let user_details = user::ActiveModel {
+        name: data
+            .admin_name
+            .unwrap_or_else(|| "Admin".to_string())
+            .into_active_value(),
+        email: Some(data.admin_email.clone()).into_active_value(),
         ..Default::default()
     };
 
@@ -109,23 +113,26 @@ async fn create_superuser_role(
     tx: &mut PgConnection,
     org_id: OrganizationId,
 ) -> Result<RoleId, Error> {
-    let superuser_role_id = RoleId::new();
-    let superuser_role = role::RoleCreatePayload {
-        id: None,
-        name: "Superuser".to_string(),
-        description: None,
-    };
+    todo!("TEMP")
+    /*
+        let superuser_role_id = RoleId::new();
+        let superuser_role = role::RoleCreatePayload {
+            id: None,
+            name: "Superuser".to_string(),
+            description: None,
+        };
 
-    add_permissions_to_role(
-        &mut *tx,
-        org_id,
-        superuser_role_id,
-        &["_global:admin".to_string()],
-    )
-    .await
-    .change_context(Error::Db)?;
+        add_permissions_to_role(
+            &mut *tx,
+            org_id,
+            superuser_role_id,
+            &["_global:admin".to_string()],
+        )
+        .await
+        .change_context(Error::Db)?;
 
-    role::queries::create_raw(tx, &superuser_role_id, &org_id, superuser_role).await?;
+        role::queries::create_raw(tx, &superuser_role_id, &org_id, superuser_role).await?;
 
-    Ok(superuser_role_id)
+        Ok(superuser_role_id)
+    */
 }

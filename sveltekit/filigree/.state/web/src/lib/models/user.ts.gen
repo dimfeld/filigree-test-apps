@@ -12,33 +12,19 @@ export const UserSchema = z.object({
 	name: z.string(),
 	email: z.string().optional(),
 	avatar_url: z.string().optional(),
-	_permission: ObjectPermission,
 });
 
 export type User = z.infer<typeof UserSchema>;
+export const UserUserViewSchema = UserSchema;
+export type UserUserView = User;
+export const UserOwnerViewSchema = UserSchema;
+export type UserOwnerView = User;
 export const UserListResultSchema = UserSchema;
 export type UserListResult = User;
-export const UserPopulatedGetResultSchema = UserSchema;
-export type UserPopulatedGetResult = User;
-export const UserPopulatedListResultSchema = UserSchema;
-export type UserPopulatedListResult = User;
 export const UserCreateResultSchema = UserSchema;
 export type UserCreateResult = User;
-
-export const UserCreatePayloadAndUpdatePayloadSchema = z.object({
-	id: z.string().optional(),
-	name: z.string(),
-	email: z.string().optional(),
-	avatar_url: z.string().optional(),
-});
-
-export type UserCreatePayloadAndUpdatePayload = z.infer<
-	typeof UserCreatePayloadAndUpdatePayloadSchema
->;
-export const UserCreatePayloadSchema = UserCreatePayloadAndUpdatePayloadSchema;
-export type UserCreatePayload = UserCreatePayloadAndUpdatePayload;
-export const UserUpdatePayloadSchema = UserCreatePayloadAndUpdatePayloadSchema;
-export type UserUpdatePayload = UserCreatePayloadAndUpdatePayload;
+export const UserSchema = UserSchema;
+export type User = User;
 
 export const baseUrl = "users";
 export const urlWithId = (id: string) => `${baseUrl}/${id}`;

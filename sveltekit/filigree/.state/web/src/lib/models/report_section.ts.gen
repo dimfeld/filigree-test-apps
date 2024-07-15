@@ -13,38 +13,19 @@ export const ReportSectionSchema = z.object({
 	viz: z.string(),
 	options: z.any(),
 	report_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
+export const ReportSectionUserViewSchema = ReportSectionSchema;
+export type ReportSectionUserView = ReportSection;
+export const ReportSectionOwnerViewSchema = ReportSectionSchema;
+export type ReportSectionOwnerView = ReportSection;
 export const ReportSectionListResultSchema = ReportSectionSchema;
 export type ReportSectionListResult = ReportSection;
-export const ReportSectionPopulatedGetResultSchema = ReportSectionSchema;
-export type ReportSectionPopulatedGetResult = ReportSection;
-export const ReportSectionPopulatedListResultSchema = ReportSectionSchema;
-export type ReportSectionPopulatedListResult = ReportSection;
 export const ReportSectionCreateResultSchema = ReportSectionSchema;
 export type ReportSectionCreateResult = ReportSection;
-
-export const ReportSectionCreatePayloadAndUpdatePayloadSchema = z.object({
-	id: z.string().optional(),
-	name: z.string(),
-	viz: z.string(),
-	options: z.any(),
-	report_id: z.string().uuid(),
-});
-
-export type ReportSectionCreatePayloadAndUpdatePayload = z.infer<
-	typeof ReportSectionCreatePayloadAndUpdatePayloadSchema
->;
-export const ReportSectionCreatePayloadSchema =
-	ReportSectionCreatePayloadAndUpdatePayloadSchema;
-export type ReportSectionCreatePayload =
-	ReportSectionCreatePayloadAndUpdatePayload;
-export const ReportSectionUpdatePayloadSchema =
-	ReportSectionCreatePayloadAndUpdatePayloadSchema;
-export type ReportSectionUpdatePayload =
-	ReportSectionCreatePayloadAndUpdatePayload;
+export const ReportSectionSchema = ReportSectionSchema;
+export type ReportSection = ReportSection;
 
 export const baseUrl = "report_sections";
 export const urlWithId = (id: string) => `${baseUrl}/${id}`;

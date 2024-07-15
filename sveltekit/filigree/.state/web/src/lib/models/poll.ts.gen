@@ -12,33 +12,19 @@ export const PollSchema = z.object({
 	question: z.string(),
 	answers: z.any(),
 	post_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type Poll = z.infer<typeof PollSchema>;
+export const PollUserViewSchema = PollSchema;
+export type PollUserView = Poll;
+export const PollOwnerViewSchema = PollSchema;
+export type PollOwnerView = Poll;
 export const PollListResultSchema = PollSchema;
 export type PollListResult = Poll;
-export const PollPopulatedGetResultSchema = PollSchema;
-export type PollPopulatedGetResult = Poll;
-export const PollPopulatedListResultSchema = PollSchema;
-export type PollPopulatedListResult = Poll;
 export const PollCreateResultSchema = PollSchema;
 export type PollCreateResult = Poll;
-
-export const PollCreatePayloadAndUpdatePayloadSchema = z.object({
-	id: z.string().optional(),
-	question: z.string(),
-	answers: z.any(),
-	post_id: z.string().uuid(),
-});
-
-export type PollCreatePayloadAndUpdatePayload = z.infer<
-	typeof PollCreatePayloadAndUpdatePayloadSchema
->;
-export const PollCreatePayloadSchema = PollCreatePayloadAndUpdatePayloadSchema;
-export type PollCreatePayload = PollCreatePayloadAndUpdatePayload;
-export const PollUpdatePayloadSchema = PollCreatePayloadAndUpdatePayloadSchema;
-export type PollUpdatePayload = PollCreatePayloadAndUpdatePayload;
+export const PollSchema = PollSchema;
+export type Poll = Poll;
 
 export const baseUrl = "polls";
 export const urlWithId = (id: string) => `${baseUrl}/${id}`;

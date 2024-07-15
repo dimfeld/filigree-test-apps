@@ -11,34 +11,19 @@ export const CommentSchema = z.object({
 	created_at: z.string().datetime(),
 	body: z.string(),
 	post_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type Comment = z.infer<typeof CommentSchema>;
+export const CommentUserViewSchema = CommentSchema;
+export type CommentUserView = Comment;
+export const CommentOwnerViewSchema = CommentSchema;
+export type CommentOwnerView = Comment;
 export const CommentListResultSchema = CommentSchema;
 export type CommentListResult = Comment;
-export const CommentPopulatedGetResultSchema = CommentSchema;
-export type CommentPopulatedGetResult = Comment;
-export const CommentPopulatedListResultSchema = CommentSchema;
-export type CommentPopulatedListResult = Comment;
 export const CommentCreateResultSchema = CommentSchema;
 export type CommentCreateResult = Comment;
-
-export const CommentCreatePayloadAndUpdatePayloadSchema = z.object({
-	id: z.string().optional(),
-	body: z.string(),
-	post_id: z.string().uuid(),
-});
-
-export type CommentCreatePayloadAndUpdatePayload = z.infer<
-	typeof CommentCreatePayloadAndUpdatePayloadSchema
->;
-export const CommentCreatePayloadSchema =
-	CommentCreatePayloadAndUpdatePayloadSchema;
-export type CommentCreatePayload = CommentCreatePayloadAndUpdatePayload;
-export const CommentUpdatePayloadSchema =
-	CommentCreatePayloadAndUpdatePayloadSchema;
-export type CommentUpdatePayload = CommentCreatePayloadAndUpdatePayload;
+export const CommentSchema = CommentSchema;
+export type Comment = Comment;
 
 export const baseUrl = "comments";
 export const urlWithId = (id: string) => `${baseUrl}/${id}`;

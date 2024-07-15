@@ -12,35 +12,33 @@ export const PostImageSchema = z.object({
 	file_size: z.number().int().optional(),
 	file_hash: z.string().optional(),
 	post_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type PostImage = z.infer<typeof PostImageSchema>;
 export const PostImageListResultSchema = PostImageSchema;
 export type PostImageListResult = PostImage;
-export const PostImagePopulatedGetResultSchema = PostImageSchema;
-export type PostImagePopulatedGetResult = PostImage;
-export const PostImagePopulatedListResultSchema = PostImageSchema;
-export type PostImagePopulatedListResult = PostImage;
 export const PostImageCreateResultSchema = PostImageSchema;
 export type PostImageCreateResult = PostImage;
+export const PostImageSchema = PostImageSchema;
+export type PostImage = PostImage;
 
-export const PostImageCreatePayloadAndUpdatePayloadSchema = z.object({
-	id: z.string().optional(),
+export const PostImageUserViewAndOwnerViewSchema = z.object({
+	id: z.string(),
+	organization_id: z.string(),
+	updated_at: z.string().datetime(),
+	created_at: z.string().datetime(),
 	file_size: z.number().int().optional(),
 	file_hash: z.string().optional(),
 	post_id: z.string().uuid(),
 });
 
-export type PostImageCreatePayloadAndUpdatePayload = z.infer<
-	typeof PostImageCreatePayloadAndUpdatePayloadSchema
+export type PostImageUserViewAndOwnerView = z.infer<
+	typeof PostImageUserViewAndOwnerViewSchema
 >;
-export const PostImageCreatePayloadSchema =
-	PostImageCreatePayloadAndUpdatePayloadSchema;
-export type PostImageCreatePayload = PostImageCreatePayloadAndUpdatePayload;
-export const PostImageUpdatePayloadSchema =
-	PostImageCreatePayloadAndUpdatePayloadSchema;
-export type PostImageUpdatePayload = PostImageCreatePayloadAndUpdatePayload;
+export const PostImageUserViewSchema = PostImageUserViewAndOwnerViewSchema;
+export type PostImageUserView = PostImageUserViewAndOwnerView;
+export const PostImageOwnerViewSchema = PostImageUserViewAndOwnerViewSchema;
+export type PostImageOwnerView = PostImageUserViewAndOwnerView;
 
 export const baseUrl = "post_images";
 export const urlWithId = (id: string) => `${baseUrl}/${id}`;

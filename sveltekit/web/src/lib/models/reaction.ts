@@ -11,34 +11,19 @@ export const ReactionSchema = z.object({
 	created_at: z.string().datetime(),
 	type: z.string(),
 	post_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type Reaction = z.infer<typeof ReactionSchema>;
+export const ReactionUserViewSchema = ReactionSchema;
+export type ReactionUserView = Reaction;
+export const ReactionOwnerViewSchema = ReactionSchema;
+export type ReactionOwnerView = Reaction;
 export const ReactionListResultSchema = ReactionSchema;
 export type ReactionListResult = Reaction;
-export const ReactionPopulatedGetResultSchema = ReactionSchema;
-export type ReactionPopulatedGetResult = Reaction;
-export const ReactionPopulatedListResultSchema = ReactionSchema;
-export type ReactionPopulatedListResult = Reaction;
 export const ReactionCreateResultSchema = ReactionSchema;
 export type ReactionCreateResult = Reaction;
-
-export const ReactionCreatePayloadAndUpdatePayloadSchema = z.object({
-	id: z.string().optional(),
-	type: z.string(),
-	post_id: z.string().uuid(),
-});
-
-export type ReactionCreatePayloadAndUpdatePayload = z.infer<
-	typeof ReactionCreatePayloadAndUpdatePayloadSchema
->;
-export const ReactionCreatePayloadSchema =
-	ReactionCreatePayloadAndUpdatePayloadSchema;
-export type ReactionCreatePayload = ReactionCreatePayloadAndUpdatePayload;
-export const ReactionUpdatePayloadSchema =
-	ReactionCreatePayloadAndUpdatePayloadSchema;
-export type ReactionUpdatePayload = ReactionCreatePayloadAndUpdatePayload;
+export const ReactionSchema = ReactionSchema;
+export type Reaction = Reaction;
 
 export const baseUrl = "reactions";
 export const urlWithId = (id: string) => `${baseUrl}/${id}`;

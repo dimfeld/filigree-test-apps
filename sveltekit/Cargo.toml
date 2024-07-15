@@ -39,7 +39,7 @@ reqwest = { version = "0.11.24", features = ["cookies", "json"] }
 rust-embed = "8.3.0"
 schemars = { version = "0.8.16", features = ["chrono", "url", "uuid1"] }
 schemars-zod = "0.1.5"
-sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+sea-orm = { version = "0.12.15", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
 sentry = { version = "0.32.2", features = ["tokio", "tower", "tower-http", "tower-axum-matched-path", "tracing"] }
 sentry-tower = { version = "0.32.2", features = ["http", "axum-matched-path"] }
 serde = { version = "1.0.197", features = ["derive"] }

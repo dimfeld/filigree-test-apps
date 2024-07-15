@@ -11,32 +11,19 @@ export const RoleSchema = z.object({
 	created_at: z.string().datetime(),
 	name: z.string(),
 	description: z.string().optional(),
-	_permission: ObjectPermission,
 });
 
 export type Role = z.infer<typeof RoleSchema>;
+export const RoleUserViewSchema = RoleSchema;
+export type RoleUserView = Role;
+export const RoleOwnerViewSchema = RoleSchema;
+export type RoleOwnerView = Role;
 export const RoleListResultSchema = RoleSchema;
 export type RoleListResult = Role;
-export const RolePopulatedGetResultSchema = RoleSchema;
-export type RolePopulatedGetResult = Role;
-export const RolePopulatedListResultSchema = RoleSchema;
-export type RolePopulatedListResult = Role;
 export const RoleCreateResultSchema = RoleSchema;
 export type RoleCreateResult = Role;
-
-export const RoleCreatePayloadAndUpdatePayloadSchema = z.object({
-	id: z.string().optional(),
-	name: z.string(),
-	description: z.string().optional(),
-});
-
-export type RoleCreatePayloadAndUpdatePayload = z.infer<
-	typeof RoleCreatePayloadAndUpdatePayloadSchema
->;
-export const RoleCreatePayloadSchema = RoleCreatePayloadAndUpdatePayloadSchema;
-export type RoleCreatePayload = RoleCreatePayloadAndUpdatePayload;
-export const RoleUpdatePayloadSchema = RoleCreatePayloadAndUpdatePayloadSchema;
-export type RoleUpdatePayload = RoleCreatePayloadAndUpdatePayload;
+export const RoleSchema = RoleSchema;
+export type Role = Role;
 
 export const baseUrl = "roles";
 export const urlWithId = (id: string) => `${baseUrl}/${id}`;

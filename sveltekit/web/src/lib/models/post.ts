@@ -31,62 +31,19 @@ export const PostSchema = z.object({
 	created_at: z.string().datetime(),
 	subject: z.string(),
 	body: z.string(),
-	_permission: ObjectPermission,
 });
 
 export type Post = z.infer<typeof PostSchema>;
+export const PostUserViewSchema = PostSchema;
+export type PostUserView = Post;
+export const PostOwnerViewSchema = PostSchema;
+export type PostOwnerView = Post;
 export const PostListResultSchema = PostSchema;
 export type PostListResult = Post;
 export const PostCreateResultSchema = PostSchema;
 export type PostCreateResult = Post;
-
-export const PostCreatePayloadAndUpdatePayloadSchema = z.object({
-	id: z.string().optional(),
-	subject: z.string(),
-	body: z.string(),
-});
-
-export type PostCreatePayloadAndUpdatePayload = z.infer<
-	typeof PostCreatePayloadAndUpdatePayloadSchema
->;
-export const PostCreatePayloadSchema = PostCreatePayloadAndUpdatePayloadSchema;
-export type PostCreatePayload = PostCreatePayloadAndUpdatePayload;
-export const PostUpdatePayloadSchema = PostCreatePayloadAndUpdatePayloadSchema;
-export type PostUpdatePayload = PostCreatePayloadAndUpdatePayload;
-
-export const PostPopulatedGetResultSchema = z.object({
-	id: z.string(),
-	organization_id: z.string(),
-	updated_at: z.string().datetime(),
-	created_at: z.string().datetime(),
-	subject: z.string(),
-	body: z.string(),
-	comment_ids: z.string().array(),
-	reactions: ReactionSchema.array(),
-	poll: PollSchema.optional(),
-	images: PostImageSchema.array(),
-	_permission: ObjectPermission,
-});
-
-export type PostPopulatedGetResult = z.infer<
-	typeof PostPopulatedGetResultSchema
->;
-
-export const PostPopulatedListResultSchema = z.object({
-	id: z.string(),
-	organization_id: z.string(),
-	updated_at: z.string().datetime(),
-	created_at: z.string().datetime(),
-	subject: z.string(),
-	body: z.string(),
-	comment_ids: z.string().array(),
-	poll_id: z.string().optional(),
-	_permission: ObjectPermission,
-});
-
-export type PostPopulatedListResult = z.infer<
-	typeof PostPopulatedListResultSchema
->;
+export const PostSchema = PostSchema;
+export type Post = Post;
 
 export const baseUrl = "posts";
 export const urlWithId = (id: string) => `${baseUrl}/${id}`;
