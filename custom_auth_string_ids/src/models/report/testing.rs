@@ -35,7 +35,7 @@ pub fn make_update_payload(i: usize) -> ReportUpdatePayload {
         id: None,
         title: format!("Test object {i}"),
         description: Some(format!("Test object {i}")),
-        ui: Some(serde_json::json!({ "key": i })),
+        ui: serde_json::json!({ "key": i }),
 
         report_sections: match i {
             0 => None,

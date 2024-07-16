@@ -14,5 +14,4 @@ RETURNING
   updated_at,
   created_at,
   type AS "typ",
-  post_id AS "post_id: PostId",
-  'owner' AS "_permission!: filigree::auth::ObjectPermission"
+  post_id AS "post_id: PostId"

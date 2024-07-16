@@ -1,6 +1,3 @@
--- $1 = has owner permission on the model
--- $2 = organization_id
--- $3 = parent_id
 INSERT INTO myapp.post_images (
   id,
   organization_id,
@@ -23,8 +20,8 @@ ON CONFLICT (
     post_id = EXCLUDED.post_id,
     updated_at = now()
   WHERE
-    post_images.organization_id = $2
-    AND post_images.post_id = $3
+    post_images.organization_id = $1
+    AND post_images.post_id = $2
   RETURNING
     id,
     organization_id,
@@ -35,5 +32,4 @@ ON CONFLICT (
     file_original_name,
     file_size,
     file_hash,
-    post_id,
-    'owner' AS "_permission"
+    post_id

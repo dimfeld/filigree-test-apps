@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use error_stack::ResultExt;
 use filigree::{
-    auth::ObjectPermission,
+    auth::{AuthInfo as _, ObjectPermission},
     errors::OrderByError,
     sql::{BindingOperator, FilterBuilder, ValuesBuilder},
 };
@@ -15,36 +15,6 @@ use tracing::{event, instrument, Level};
 
 use super::{types::*, RoleId};
 use crate::{auth::AuthInfo, models::organization::OrganizationId, Error};
-
-type QueryAs<'q, T> = sqlx::query::QueryAs<
-    'q,
-    sqlx::Postgres,
-    T,
-    <sqlx::Postgres as sqlx::database::HasArguments<'q>>::Arguments,
->;
-
-/// Get a Role from the database
-#[instrument(skip(db))]
-pub async fn get(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    id: &RoleId,
-) -> Result<Role, error_stack::Report<Error>> {
-    let actor_ids = auth.actor_ids();
-    let object = query_file_as!(
-        Role,
-        "src/models/role/select_one.sql",
-        id.as_uuid(),
-        auth.organization_id.as_uuid(),
-        &actor_ids
-    )
-    .fetch_optional(db)
-    .await
-    .change_context(Error::Db)?
-    .ok_or(Error::NotFound("Role"))?;
-
-    Ok(object)
-}
 
 #[derive(Debug, Default)]
 enum OrderByField {
@@ -112,7 +82,7 @@ pub struct ListQueryFilters {
 
 impl ListQueryFilters {
     fn build_where_clause(&self) -> String {
-        let mut bindings = FilterBuilder::new(5);
+        let mut bindings = FilterBuilder::new(4);
 
         if !self.id.is_empty() {
             bindings.add_vec("id", &self.id);
@@ -140,17 +110,6 @@ impl ListQueryFilters {
     }
 
     fn bind_to_query<'a, T>(&'a self, mut query: QueryAs<'a, T>) -> QueryAs<'a, T> {
-        const MAX_PER_PAGE: u32 = 200;
-        const DEFAULT_PER_PAGE: u32 = 50;
-        let per_page = self
-            .per_page
-            .unwrap_or(DEFAULT_PER_PAGE)
-            .min(MAX_PER_PAGE)
-            .max(1);
-        let offset = self.page.unwrap_or(0) * per_page;
-        event!(Level::DEBUG, per_page, offset);
-        query = query.bind(per_page as i32).bind(offset as i32);
-
         if !self.id.is_empty() {
             event!(Level::DEBUG, id = ?self.id);
             query = query.bind(&self.id);
@@ -180,149 +139,205 @@ impl ListQueryFilters {
     }
 }
 
-#[instrument(skip(db))]
-pub async fn list(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    filters: &ListQueryFilters,
-) -> Result<Vec<RoleListResult>, error_stack::Report<Error>> {
-    let q = include_str!("list.sql");
-    list_internal(q, db, auth, filters).await
-}
+type QueryAs<'q, T> = sqlx::query::QueryAs<
+    'q,
+    sqlx::Postgres,
+    T,
+    <sqlx::Postgres as sqlx::database::HasArguments<'q>>::Arguments,
+>;
 
-async fn list_internal<T>(
-    query_template: &str,
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    filters: &ListQueryFilters,
-) -> Result<Vec<T>, error_stack::Report<Error>>
-where
-    T: for<'r> sqlx::FromRow<'r, PgRow> + Send + Unpin,
-{
-    let (descending, order_by_field) =
-        parse_order_by(filters.order_by.as_deref().unwrap_or("name"))
-            .change_context(Error::Filter)?;
-    let order_direction = if descending { "DESC" } else { "ASC" };
+impl Role {
+    /// Get a Role from the database
+    #[instrument(skip(db))]
+    pub async fn get(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        id: &RoleId,
+    ) -> Result<Role, error_stack::Report<Error>> {
+        auth.require_permission(super::READ_PERMISSION)?;
 
-    let q = query_template.replace(
-        "__insertion_point_order_by",
-        &format!("{} {}", order_by_field.as_str(), order_direction),
-    );
+        let object = query_file_as!(
+            Role,
+            "src/models/role/select_one.sql",
+            id.as_uuid(),
+            auth.organization_id.as_uuid()
+        )
+        .fetch_optional(db)
+        .await
+        .change_context(Error::Db)?
+        .ok_or(Error::NotFound("Role"))?;
 
-    let q = q.replace("__insertion_point_filters", &filters.build_where_clause());
+        Ok(object)
+    }
 
-    let mut query = sqlx::query_as::<_, T>(q.as_str());
+    #[instrument(skip(db))]
+    pub async fn list(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        filters: &ListQueryFilters,
+    ) -> Result<Vec<RoleListResult>, error_stack::Report<Error>> {
+        let q = include_str!("list.sql");
+        Self::list_internal(q, db, auth, filters).await
+    }
 
-    let actor_ids = auth.actor_ids();
-    event!(Level::DEBUG, organization_id=%auth.organization_id, actor_ids=?actor_ids);
-    query = query.bind(&auth.organization_id).bind(&actor_ids);
+    async fn list_internal<T>(
+        query_template: &str,
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        filters: &ListQueryFilters,
+    ) -> Result<Vec<T>, error_stack::Report<Error>>
+    where
+        T: for<'r> sqlx::FromRow<'r, PgRow> + Send + Unpin,
+    {
+        auth.require_permission(super::READ_PERMISSION)?;
 
-    query = filters.bind_to_query(query);
+        const MAX_PER_PAGE: u32 = 200;
+        const DEFAULT_PER_PAGE: u32 = 50;
+        let per_page = filters
+            .per_page
+            .unwrap_or(DEFAULT_PER_PAGE)
+            .min(MAX_PER_PAGE)
+            .max(1) as i32;
+        let offset = filters.page.unwrap_or(0) as i32 * per_page;
+        event!(Level::DEBUG, per_page, offset);
 
-    let results = query.fetch_all(db).await.change_context(Error::Db)?;
+        let (descending, order_by_field) =
+            parse_order_by(filters.order_by.as_deref().unwrap_or("name"))
+                .change_context(Error::Filter)?;
+        let order_direction = if descending { "DESC" } else { "ASC" };
 
-    Ok(results)
-}
+        let q = query_template.replace(
+            "__insertion_point_order_by",
+            &format!("{} {}", order_by_field.as_str(), order_direction),
+        );
 
-/// Create a new Role in the database.
-pub async fn create(
-    db: &mut PgConnection,
-    auth: &AuthInfo,
-    payload: RoleCreatePayload,
-) -> Result<RoleCreateResult, error_stack::Report<Error>> {
-    // TODO create permissions auth check
+        let q = q.replace("__insertion_point_filters", &filters.build_where_clause());
 
-    let id = RoleId::new();
+        let mut query = sqlx::query_as::<_, T>(q.as_str());
 
-    create_raw(&mut *db, &id, &auth.organization_id, payload).await
-}
+        event!(Level::DEBUG, organization_id=%auth.organization_id);
+        query = query
+            .bind(&auth.organization_id)
+            .bind(per_page)
+            .bind(offset);
 
-/// Create a new Role in the database, allowing the ID to be explicitly specified
-/// regardless of whether it would normally be allowed.
-#[instrument(skip(db))]
-pub async fn create_raw(
-    db: &mut PgConnection,
-    id: &RoleId,
-    organization_id: &OrganizationId,
-    payload: RoleCreatePayload,
-) -> Result<RoleCreateResult, error_stack::Report<Error>> {
-    let result = query_file_as!(
-        Role,
-        "src/models/role/insert.sql",
-        id.as_uuid(),
-        organization_id.as_uuid(),
-        &payload.name,
-        payload.description.as_ref(),
-    )
-    .fetch_one(&mut *db)
-    .await
-    .change_context(Error::Db)?;
+        query = filters.bind_to_query(query);
 
-    Ok(result)
-}
+        let results = query.fetch_all(db).await.change_context(Error::Db)?;
 
-#[instrument(skip(db))]
-pub async fn update(
-    db: &mut PgConnection,
-    auth: &AuthInfo,
-    id: &RoleId,
-    payload: RoleUpdatePayload,
-) -> Result<bool, error_stack::Report<Error>> {
-    let actor_ids = auth.actor_ids();
-    let result = query_file_scalar!(
-        "src/models/role/update.sql",
-        id.as_uuid(),
-        auth.organization_id.as_uuid(),
-        &actor_ids,
-        &payload.name as _,
-        payload.description.as_ref() as _,
-    )
-    .fetch_optional(&mut *db)
-    .await
-    .change_context(Error::Db)?;
+        Ok(results)
+    }
 
-    let Some(is_owner) = result else {
-        return Ok(false);
-    };
+    /// Create a new Role in the database.
+    pub async fn create(
+        db: &mut PgConnection,
+        auth: &AuthInfo,
+        payload: RoleCreatePayload,
+    ) -> Result<RoleCreateResult, error_stack::Report<Error>> {
+        auth.require_permission(super::CREATE_PERMISSION)?;
 
-    Ok(true)
-}
+        let id = RoleId::new();
 
-#[instrument(skip(db))]
-pub async fn delete(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    id: &RoleId,
-) -> Result<bool, error_stack::Report<Error>> {
-    let actor_ids = auth.actor_ids();
-    let result = query_file!(
-        "src/models/role/delete.sql",
-        id.as_uuid(),
-        auth.organization_id.as_uuid(),
-        &actor_ids
-    )
-    .execute(db)
-    .await
-    .change_context(Error::Db)?;
-    Ok(result.rows_affected() > 0)
-}
+        Self::create_raw(&mut *db, &id, &auth.organization_id, payload).await
+    }
 
-#[instrument(skip(db))]
-pub async fn lookup_object_permissions(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    #[allow(unused_variables)] id: &RoleId,
-) -> Result<Option<ObjectPermission>, error_stack::Report<Error>> {
-    let actor_ids = auth.actor_ids();
-    let result = query_file_scalar!(
-        "src/models/role/lookup_object_permissions.sql",
-        auth.organization_id.as_uuid(),
-        &actor_ids,
-    )
-    .fetch_one(db)
-    .await
-    .change_context(Error::Db)?;
+    /// Create a new Role in the database, allowing the ID to be explicitly specified
+    /// regardless of whether it would normally be allowed.
+    #[instrument(skip(db))]
+    pub async fn create_raw(
+        db: &mut PgConnection,
+        id: &RoleId,
+        organization_id: &OrganizationId,
+        payload: RoleCreatePayload,
+    ) -> Result<RoleCreateResult, error_stack::Report<Error>> {
+        let result = query_file_as!(
+            Role,
+            "src/models/role/insert.sql",
+            id.as_uuid(),
+            organization_id.as_uuid(),
+            &payload.name as _,
+            payload.description.as_ref() as _
+        )
+        .fetch_one(&mut *db)
+        .await
+        .change_context(Error::Db)?;
 
-    let perm = result.and_then(|r| ObjectPermission::from_str_infallible(&r));
-    Ok(perm)
+        Ok(result)
+    }
+
+    #[instrument(skip(db))]
+    pub async fn update(
+        db: &mut PgConnection,
+        auth: &AuthInfo,
+        id: &RoleId,
+        payload: RoleUpdatePayload,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+
+        let result = query_file_scalar!(
+            "src/models/role/update.sql",
+            id.as_uuid(),
+            &payload.name as _,
+            payload.description.as_ref() as _,
+            auth.organization_id.as_uuid()
+        )
+        .execute(&mut *db)
+        .await
+        .change_context(Error::Db)?;
+
+        if result.rows_affected() == 0 {
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
+    #[instrument(skip(db))]
+    pub async fn delete(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        id: &RoleId,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        auth.require_permission(super::CREATE_PERMISSION)?;
+
+        let result = query_file!(
+            "src/models/role/delete.sql",
+            id.as_uuid(),
+            auth.organization_id.as_uuid()
+        )
+        .execute(db)
+        .await
+        .change_context(Error::Db)?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    #[instrument(skip(db))]
+    pub async fn lookup_object_permissions(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        #[allow(unused_variables)] id: &RoleId,
+    ) -> Result<Option<ObjectPermission>, error_stack::Report<Error>> {
+        let mut saw_write = false;
+        let mut saw_read = false;
+
+        use super::{OWNER_PERMISSION, READ_PERMISSION, WRITE_PERMISSION};
+
+        for perm in &auth.permissions {
+            if perm == OWNER_PERMISSION {
+                return Ok(Some(ObjectPermission::Owner));
+            } else if perm == WRITE_PERMISSION {
+                saw_write = true;
+            } else if perm == READ_PERMISSION {
+                saw_read = true;
+            }
+        }
+
+        if saw_write {
+            return Ok(Some(ObjectPermission::Write));
+        } else if saw_read {
+            return Ok(Some(ObjectPermission::Read));
+        } else {
+            return Ok(None);
+        }
+    }
 }

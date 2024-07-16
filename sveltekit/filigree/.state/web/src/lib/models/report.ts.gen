@@ -17,7 +17,6 @@ export const ReportSchema = z.object({
 	title: z.string(),
 	description: z.string().optional(),
 	ui: z.any(),
-	_permission: ObjectPermission,
 });
 
 export type Report = z.infer<typeof ReportSchema>;
@@ -43,7 +42,6 @@ export const ReportPopulatedGetResultAndCreateResultSchema = z.object({
 	description: z.string().optional(),
 	ui: z.any(),
 	report_sections: ReportSectionSchema.array(),
-	_permission: ObjectPermission,
 });
 
 export type ReportPopulatedGetResultAndCreateResult = z.infer<
@@ -65,7 +63,6 @@ export const ReportPopulatedListResultSchema = z.object({
 	description: z.string().optional(),
 	ui: z.any(),
 	report_section_ids: z.string().array(),
-	_permission: ObjectPermission,
 });
 
 export type ReportPopulatedListResult = z.infer<
@@ -76,7 +73,7 @@ export const ReportUpdatePayloadSchema = z.object({
 	id: z.string().optional(),
 	title: z.string(),
 	description: z.string().optional(),
-	ui: z.any().optional(),
+	ui: z.any(),
 	report_sections: ReportSectionUpdatePayloadSchema.array().optional(),
 });
 

@@ -11,7 +11,6 @@ export const OrganizationSchema = z.object({
 	name: z.string(),
 	owner: z.string().uuid().optional(),
 	default_role: z.string().uuid().optional(),
-	_permission: ObjectPermission,
 });
 
 export type Organization = z.infer<typeof OrganizationSchema>;

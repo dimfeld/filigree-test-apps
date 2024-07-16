@@ -31,7 +31,6 @@ export const PostSchema = z.object({
 	created_at: z.string().datetime(),
 	subject: z.string(),
 	body: z.string(),
-	_permission: ObjectPermission,
 });
 
 export type Post = z.infer<typeof PostSchema>;
@@ -65,7 +64,6 @@ export const PostPopulatedGetResultSchema = z.object({
 	reactions: ReactionSchema.array(),
 	poll: PollSchema.optional(),
 	images: PostImageSchema.array(),
-	_permission: ObjectPermission,
 });
 
 export type PostPopulatedGetResult = z.infer<
@@ -81,7 +79,6 @@ export const PostPopulatedListResultSchema = z.object({
 	body: z.string(),
 	comment_ids: z.string().array(),
 	poll_id: z.string().optional(),
-	_permission: ObjectPermission,
 });
 
 export type PostPopulatedListResult = z.infer<

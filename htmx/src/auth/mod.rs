@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use axum::routing::{self, Router};
 use error_stack::{Report, ResultExt};
 use filigree::auth::{
-    AuthError, ExpiryStyle, OrganizationId, PermissionChecker, RoleId, SessionKey,
+    AuthError, AuthInfo as _, ExpiryStyle, OrganizationId, PermissionChecker, RoleId, SessionKey,
     UserFromRequestPartsValue, UserId,
 };
 use sqlx::{query_file_as, PgPool};
@@ -44,6 +44,19 @@ impl AuthInfo {
             .map(|id| *id.as_uuid())
             .chain(std::iter::once(*self.user_id.as_uuid()))
             .collect::<Vec<_>>()
+    }
+
+    pub fn require_permission(
+        &self,
+        permission: &'static str,
+    ) -> Result<(), error_stack::Report<crate::Error>> {
+        if !self.has_permission(permission) {
+            return Err(error_stack::Report::new(crate::Error::MissingPermission(
+                permission,
+            )));
+        }
+
+        Ok(())
     }
 }
 
@@ -87,7 +100,7 @@ impl filigree::auth::AuthQueries for AuthQueries {
         &self,
         api_key: Uuid,
         hash: Vec<u8>,
-    ) -> Result<Option<AuthInfo>, Report<AuthError>> {
+    ) -> Result<Option<AuthInfo>, error_stack::Report<AuthError>> {
         query_file_as!(AuthInfo, "src/auth/fetch_api_key.sql", api_key, hash)
             .fetch_optional(&self.db)
             .await

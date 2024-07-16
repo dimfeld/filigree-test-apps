@@ -12,12 +12,11 @@ ON CONFLICT (
   id)
   DO UPDATE SET type = EXCLUDED.type, post_id = EXCLUDED.post_id, updated_at = now()
   WHERE
-    reactions.organization_id = $2 AND reactions.post_id = EXCLUDED.post_id
+    reactions.organization_id = $2 AND reactions.post_id = $5
   RETURNING
     id AS "id: ReactionId",
     organization_id AS "organization_id: crate::models::organization::OrganizationId",
     updated_at,
     created_at,
     type AS "typ",
-    post_id AS "post_id: PostId",
-    'owner' AS "_permission!: filigree::auth::ObjectPermission"
+    post_id AS "post_id: PostId"

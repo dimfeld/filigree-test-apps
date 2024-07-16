@@ -9,8 +9,7 @@ use sqlx_transparent_json_decode::sqlx_json_decode;
 use super::UserId;
 use crate::models::organization::OrganizationId;
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct User {
     pub id: UserId,
     pub organization_id: Option<crate::models::organization::OrganizationId>,
@@ -19,7 +18,6 @@ pub struct User {
     pub name: String,
     pub email: Option<String>,
     pub avatar_url: Option<String>,
-    pub _permission: ObjectPermission,
 }
 
 pub type UserListResult = User;
@@ -75,26 +73,7 @@ impl Default for User {
             name: Self::default_name(),
             email: Self::default_email(),
             avatar_url: Self::default_avatar_url(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for User {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("User", 8)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("email", &self.email)?;
-        state.serialize_field("avatar_url", &self.avatar_url)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }
 

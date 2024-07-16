@@ -8,28 +8,9 @@ SELECT
   file_original_name,
   file_size,
   file_hash,
-  post_id AS "post_id: PostId",
-  _permission AS "_permission!: filigree::auth::ObjectPermission"
+  post_id AS "post_id: PostId"
 FROM
   public.post_images tb
-  JOIN LATERAL (
-    SELECT
-      CASE WHEN bool_or(permission IN ('org_admin', 'PostImage::owner')) THEN
-        'owner'
-      WHEN bool_or(permission = 'PostImage::write') THEN
-        'write'
-      WHEN bool_or(permission = 'PostImage::read') THEN
-        'read'
-      ELSE
-        NULL
-      END _permission
-    FROM
-      public.permissions
-    WHERE
-      organization_id = $2
-      AND actor_id = ANY ($3)
-      AND permission IN ('org_admin', 'PostImage::owner', 'PostImage::write', 'PostImage::read'))
-	_permission ON _permission IS NOT NULL
 WHERE
   tb.id = $1
   AND tb.organization_id = $2

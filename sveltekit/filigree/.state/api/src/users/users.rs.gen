@@ -185,7 +185,7 @@ async fn get_current_user_endpoint(
 ) -> Result<impl IntoResponse, Error> {
     // TODO This should be a more custom query, include organization info and permissions
     // and such, and work even if the user doesn't have the User:read permission.
-    let user = crate::models::user::queries::get(&state.db, &authed, &authed.user_id).await?;
+    let user = User::get(&state.db, &authed, &authed.user_id).await?;
 
     let user = SelfUser {
         user,
@@ -203,8 +203,7 @@ async fn update_current_user_endpoint(
 ) -> Result<impl IntoResponse, Error> {
     // TODO Need a query specifically for updating self
     let mut tx = state.db.begin().await.change_context(Error::Db)?;
-    let updated =
-        crate::models::user::queries::update(&mut *tx, &authed, &authed.user_id, body).await?;
+    let updated = User::update(&mut *tx, &authed, &authed.user_id, body).await?;
     tx.commit().await.change_context(Error::Db)?;
 
     let status = if updated {

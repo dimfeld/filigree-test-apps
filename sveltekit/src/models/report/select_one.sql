@@ -5,28 +5,9 @@ SELECT
   created_at,
   title,
   description,
-  ui,
-  _permission AS "_permission!: filigree::auth::ObjectPermission"
+  ui
 FROM
   public.reports tb
-  JOIN LATERAL (
-    SELECT
-      CASE WHEN bool_or(permission IN ('org_admin', 'Report::owner')) THEN
-        'owner'
-      WHEN bool_or(permission = 'Report::write') THEN
-        'write'
-      WHEN bool_or(permission = 'Report::read') THEN
-        'read'
-      ELSE
-        NULL
-      END _permission
-    FROM
-      public.permissions
-    WHERE
-      organization_id = $2
-      AND actor_id = ANY ($3)
-      AND permission IN ('org_admin', 'Report::owner', 'Report::write', 'Report::read'))
-	_permission ON _permission IS NOT NULL
 WHERE
   tb.id = $1
   AND tb.organization_id = $2

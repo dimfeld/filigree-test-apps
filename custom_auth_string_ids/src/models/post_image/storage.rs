@@ -67,14 +67,8 @@ where
         ..Default::default()
     };
 
-    let result = super::queries::upsert_with_parent(
-        tx,
-        &auth.organization_id,
-        true,
-        &parent_id,
-        &db_payload,
-    )
-    .await?;
+    let result =
+        PostImage::upsert_with_parent(tx, &auth.organization_id, &parent_id, &db_payload).await?;
 
     Ok(result)
 }
@@ -125,14 +119,8 @@ pub async fn upload(
         ..Default::default()
     };
 
-    let result = super::queries::upsert_with_parent(
-        tx,
-        &auth.organization_id,
-        true,
-        &parent_id,
-        &db_payload,
-    )
-    .await?;
+    let result =
+        PostImage::upsert_with_parent(tx, &auth.organization_id, &parent_id, &db_payload).await?;
 
     let storage = get_storage(state);
     storage
@@ -162,7 +150,7 @@ pub async fn delete_by_id(
     id: PostImageId,
 ) -> Result<bool, error_stack::Report<Error>> {
     let storage_key = get_storage_key_by_id(state, auth, &mut *tx, id).await?;
-    let deleted = super::queries::delete_with_parent(&mut *tx, auth, &parent_id, &id).await?;
+    let deleted = PostImage::delete_with_parent(&mut *tx, auth, &parent_id, &id).await?;
 
     if deleted {
         delete_by_key(state, &storage_key).await?;
@@ -180,7 +168,7 @@ pub async fn delete_by_parent_id(
 ) -> Result<bool, error_stack::Report<Error>> {
     let storage_keys = get_storage_keys_by_parent_id(state, auth, &mut *tx, parent_id).await?;
     let deleted =
-        super::queries::delete_all_children_of_parent(&mut *tx, &auth.organization_id, &parent_id)
+        PostImage::delete_all_children_of_parent(&mut *tx, &auth.organization_id, &parent_id)
             .await?;
 
     if deleted {
@@ -215,8 +203,6 @@ pub async fn get_storage_key_by_id(
     tx: &mut PgConnection,
     id: PostImageId,
 ) -> Result<String, error_stack::Report<Error>> {
-    let storage_key = super::queries::get(&mut *tx, auth, &id)
-        .await?
-        .file_storage_key;
+    let storage_key = PostImage::get(&mut *tx, auth, &id).await?.file_storage_key;
     Ok(storage_key)
 }

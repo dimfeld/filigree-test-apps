@@ -12,7 +12,6 @@ export const UserSchema = z.object({
 	name: z.string(),
 	email: z.string().optional(),
 	avatar_url: z.string().optional(),
-	_permission: ObjectPermission,
 });
 
 export type User = z.infer<typeof UserSchema>;

@@ -1,6 +1,3 @@
--- $1 = has owner permission on the model
--- $2 = organization_id
--- $3 = parent_id
 INSERT INTO public.report_sections (
   id,
   organization_id,
@@ -19,8 +16,8 @@ ON CONFLICT (
     report_id = EXCLUDED.report_id,
     updated_at = now()
   WHERE
-    report_sections.organization_id = $2
-    AND report_sections.report_id = $3
+    report_sections.organization_id = $1
+    AND report_sections.report_id = $2
   RETURNING
     id,
     organization_id,
@@ -29,5 +26,4 @@ ON CONFLICT (
     name,
     viz,
     options,
-    report_id,
-    'owner' AS "_permission"
+    report_id

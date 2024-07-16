@@ -28,7 +28,7 @@ ON CONFLICT (
     updated_at = now()
   WHERE
     post_images.organization_id = $2
-    AND post_images.post_id = EXCLUDED.post_id
+    AND post_images.post_id = $9
   RETURNING
     id AS "id: PostImageId",
     organization_id AS "organization_id: crate::models::organization::OrganizationId",
@@ -39,5 +39,4 @@ ON CONFLICT (
     file_original_name,
     file_size,
     file_hash,
-    post_id AS "post_id: PostId",
-    'owner' AS "_permission!: filigree::auth::ObjectPermission"
+    post_id AS "post_id: PostId"

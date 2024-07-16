@@ -13,7 +13,6 @@ export const ReportSectionSchema = z.object({
 	viz: z.string(),
 	options: z.any(),
 	report_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type ReportSection = z.infer<typeof ReportSectionSchema>;

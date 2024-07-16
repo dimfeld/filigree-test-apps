@@ -9,8 +9,7 @@ use sqlx_transparent_json_decode::sqlx_json_decode;
 use super::CommentId;
 use crate::models::{organization::OrganizationId, post::PostId};
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct Comment {
     pub id: CommentId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -18,7 +17,6 @@ pub struct Comment {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub body: String,
     pub post_id: PostId,
-    pub _permission: ObjectPermission,
 }
 
 pub type CommentListResult = Comment;
@@ -69,25 +67,7 @@ impl Default for Comment {
             created_at: Self::default_created_at(),
             body: Self::default_body(),
             post_id: Self::default_post_id(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for Comment {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Comment", 7)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("body", &self.body)?;
-        state.serialize_field("post_id", &self.post_id)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }
 

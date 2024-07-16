@@ -9,8 +9,7 @@ use sqlx_transparent_json_decode::sqlx_json_decode;
 use super::ReportSectionId;
 use crate::models::{organization::OrganizationId, report::ReportId};
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct ReportSection {
     pub id: ReportSectionId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -20,7 +19,6 @@ pub struct ReportSection {
     pub viz: String,
     pub options: serde_json::Value,
     pub report_id: ReportId,
-    pub _permission: ObjectPermission,
 }
 
 pub type ReportSectionListResult = ReportSection;
@@ -81,27 +79,7 @@ impl Default for ReportSection {
             viz: Self::default_viz(),
             options: Self::default_options(),
             report_id: Self::default_report_id(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for ReportSection {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("ReportSection", 9)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("viz", &self.viz)?;
-        state.serialize_field("options", &self.options)?;
-        state.serialize_field("report_id", &self.report_id)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }
 

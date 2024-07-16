@@ -11,7 +11,6 @@ export const ReactionSchema = z.object({
 	created_at: z.string().datetime(),
 	type: z.string(),
 	post_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type Reaction = z.infer<typeof ReactionSchema>;

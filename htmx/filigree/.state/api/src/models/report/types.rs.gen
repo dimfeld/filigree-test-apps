@@ -14,8 +14,7 @@ use crate::models::{
     },
 };
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct Report {
     pub id: ReportId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -24,7 +23,6 @@ pub struct Report {
     pub title: String,
     pub description: Option<String>,
     pub ui: serde_json::Value,
-    pub _permission: ObjectPermission,
 }
 
 pub type ReportListResult = Report;
@@ -74,26 +72,7 @@ impl Default for Report {
             title: Self::default_title(),
             description: Self::default_description(),
             ui: Self::default_ui(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for Report {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Report", 8)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("title", &self.title)?;
-        state.serialize_field("description", &self.description)?;
-        state.serialize_field("ui", &self.ui)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }
 
@@ -144,8 +123,7 @@ impl Default for ReportCreatePayload {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct ReportPopulatedGetResultAndCreateResult {
     pub id: ReportId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -155,7 +133,6 @@ pub struct ReportPopulatedGetResultAndCreateResult {
     pub description: Option<String>,
     pub ui: serde_json::Value,
     pub report_sections: Vec<ReportSection>,
-    pub _permission: ObjectPermission,
 }
 
 pub type ReportPopulatedGetResult = ReportPopulatedGetResultAndCreateResult;
@@ -212,33 +189,11 @@ impl Default for ReportPopulatedGetResultAndCreateResult {
             description: Self::default_description(),
             ui: Self::default_ui(),
             report_sections: Self::default_report_sections(),
-            _permission: ObjectPermission::Owner,
         }
     }
 }
 
-impl Serialize for ReportPopulatedGetResultAndCreateResult {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state =
-            serializer.serialize_struct("ReportPopulatedGetResultAndCreateResult", 9)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("title", &self.title)?;
-        state.serialize_field("description", &self.description)?;
-        state.serialize_field("ui", &self.ui)?;
-        state.serialize_field("report_sections", &self.report_sections)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
-    }
-}
-
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct ReportPopulatedListResult {
     pub id: ReportId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -248,7 +203,6 @@ pub struct ReportPopulatedListResult {
     pub description: Option<String>,
     pub ui: serde_json::Value,
     pub report_section_ids: Vec<ReportSectionId>,
-    pub _permission: ObjectPermission,
 }
 
 impl ReportPopulatedListResult {
@@ -301,27 +255,7 @@ impl Default for ReportPopulatedListResult {
             description: Self::default_description(),
             ui: Self::default_ui(),
             report_section_ids: Self::default_report_section_ids(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for ReportPopulatedListResult {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("ReportPopulatedListResult", 9)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("title", &self.title)?;
-        state.serialize_field("description", &self.description)?;
-        state.serialize_field("ui", &self.ui)?;
-        state.serialize_field("report_section_ids", &self.report_section_ids)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }
 
@@ -331,7 +265,7 @@ pub struct ReportUpdatePayload {
     pub id: Option<ReportId>,
     pub title: String,
     pub description: Option<String>,
-    pub ui: Option<serde_json::Value>,
+    pub ui: serde_json::Value,
     pub report_sections: Option<Vec<ReportSectionUpdatePayload>>,
 }
 
@@ -351,8 +285,8 @@ impl ReportUpdatePayload {
         None
     }
 
-    pub fn default_ui() -> Option<serde_json::Value> {
-        None
+    pub fn default_ui() -> serde_json::Value {
+        <serde_json::Value as Default>::default().into()
     }
 
     pub fn default_report_sections() -> Option<Vec<ReportSectionUpdatePayload>> {

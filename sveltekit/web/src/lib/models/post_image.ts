@@ -12,7 +12,6 @@ export const PostImageSchema = z.object({
 	file_size: z.number().int().optional(),
 	file_hash: z.string().optional(),
 	post_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type PostImage = z.infer<typeof PostImageSchema>;

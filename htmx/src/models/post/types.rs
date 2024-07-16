@@ -15,8 +15,7 @@ use crate::models::{
     reaction::{Reaction, ReactionCreatePayload, ReactionId, ReactionUpdatePayload},
 };
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct Post {
     pub id: PostId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -24,7 +23,6 @@ pub struct Post {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub subject: String,
     pub body: String,
-    pub _permission: ObjectPermission,
 }
 
 pub type PostListResult = Post;
@@ -71,25 +69,7 @@ impl Default for Post {
             created_at: Self::default_created_at(),
             subject: Self::default_subject(),
             body: Self::default_body(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for Post {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Post", 7)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("subject", &self.subject)?;
-        state.serialize_field("body", &self.body)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }
 
@@ -132,8 +112,7 @@ impl Default for PostCreatePayloadAndUpdatePayload {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct PostPopulatedGetResult {
     pub id: PostId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -145,7 +124,6 @@ pub struct PostPopulatedGetResult {
     pub reactions: Vec<Reaction>,
     pub poll: Option<Poll>,
     pub images: Vec<PostImage>,
-    pub _permission: ObjectPermission,
 }
 
 impl PostPopulatedGetResult {
@@ -208,34 +186,11 @@ impl Default for PostPopulatedGetResult {
             reactions: Self::default_reactions(),
             poll: Self::default_poll(),
             images: Self::default_images(),
-            _permission: ObjectPermission::Owner,
         }
     }
 }
 
-impl Serialize for PostPopulatedGetResult {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("PostPopulatedGetResult", 11)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("subject", &self.subject)?;
-        state.serialize_field("body", &self.body)?;
-        state.serialize_field("comment_ids", &self.comment_ids)?;
-        state.serialize_field("reactions", &self.reactions)?;
-        state.serialize_field("poll", &self.poll)?;
-        state.serialize_field("images", &self.images)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
-    }
-}
-
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct PostPopulatedListResult {
     pub id: PostId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -245,7 +200,6 @@ pub struct PostPopulatedListResult {
     pub body: String,
     pub comment_ids: Vec<CommentId>,
     pub poll_id: Option<PollId>,
-    pub _permission: ObjectPermission,
 }
 
 impl PostPopulatedListResult {
@@ -298,26 +252,6 @@ impl Default for PostPopulatedListResult {
             body: Self::default_body(),
             comment_ids: Self::default_comment_ids(),
             poll_id: Self::default_poll_id(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for PostPopulatedListResult {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("PostPopulatedListResult", 9)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("subject", &self.subject)?;
-        state.serialize_field("body", &self.body)?;
-        state.serialize_field("comment_ids", &self.comment_ids)?;
-        state.serialize_field("poll_id", &self.poll_id)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }

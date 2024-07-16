@@ -17,5 +17,4 @@ RETURNING
   created_at,
   question,
   answers,
-  post_id AS "post_id: PostId",
-  'owner' AS "_permission!: filigree::auth::ObjectPermission"
+  post_id AS "post_id: PostId"

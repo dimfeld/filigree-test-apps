@@ -12,7 +12,6 @@ export const PollSchema = z.object({
 	question: z.string(),
 	answers: z.any(),
 	post_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type Poll = z.infer<typeof PollSchema>;

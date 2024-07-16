@@ -17,5 +17,4 @@ RETURNING
   created_at,
   name,
   email,
-  avatar_url,
-  'owner' AS "_permission!: filigree::auth::ObjectPermission"
+  avatar_url

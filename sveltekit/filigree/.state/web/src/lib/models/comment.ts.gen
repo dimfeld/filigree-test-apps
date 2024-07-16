@@ -11,7 +11,6 @@ export const CommentSchema = z.object({
 	created_at: z.string().datetime(),
 	body: z.string(),
 	post_id: z.string().uuid(),
-	_permission: ObjectPermission,
 });
 
 export type Comment = z.infer<typeof CommentSchema>;

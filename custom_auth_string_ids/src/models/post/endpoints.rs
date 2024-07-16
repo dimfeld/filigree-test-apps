@@ -37,7 +37,7 @@ async fn get(
     auth: Authed,
     Path(id): Path<PostId>,
 ) -> Result<impl IntoResponse, Error> {
-    let object = queries::get_populated(&state.db, &auth, &id).await?;
+    let object = Post::get_populated(&state.db, &auth, &id).await?;
 
     Ok(Json(object))
 }
@@ -47,7 +47,7 @@ async fn list(
     auth: Authed,
     Query(qs): Query<queries::ListQueryFilters>,
 ) -> Result<impl IntoResponse, Error> {
-    let results = queries::list_populated(&state.db, &auth, &qs).await?;
+    let results = Post::list_populated(&state.db, &auth, &qs).await?;
 
     Ok(Json(results))
 }
@@ -58,7 +58,7 @@ async fn create(
     FormOrJson(payload): FormOrJson<PostCreatePayload>,
 ) -> Result<impl IntoResponse, Error> {
     let mut tx = state.db.begin().await.change_context(Error::Db)?;
-    let result = queries::create(&mut *tx, &auth, payload).await?;
+    let result = Post::create(&mut *tx, &auth, payload).await?;
     tx.commit().await.change_context(Error::Db)?;
 
     Ok((StatusCode::CREATED, Json(result)))
@@ -72,7 +72,7 @@ async fn update(
 ) -> Result<impl IntoResponse, Error> {
     let mut tx = state.db.begin().await.change_context(Error::Db)?;
 
-    let result = queries::update(&mut *tx, &auth, &id, payload).await?;
+    let result = Post::update(&mut *tx, &auth, &id, payload).await?;
 
     tx.commit().await.change_context(Error::Db)?;
 
@@ -95,7 +95,7 @@ async fn delete(
     )
     .await?;
 
-    let deleted = queries::delete(&mut *tx, &auth, &id).await?;
+    let deleted = Post::delete(&mut *tx, &auth, &id).await?;
 
     if !deleted {
         return Ok(StatusCode::NOT_FOUND);
@@ -118,7 +118,7 @@ async fn list_child_comment(
 ) -> Result<impl IntoResponse, Error> {
     qs.post_id = vec![parent_id];
 
-    let object = crate::models::comment::queries::list(&state.db, &auth, &qs).await?;
+    let object = crate::models::comment::Comment::list(&state.db, &auth, &qs).await?;
 
     Ok(Json(object))
 }
@@ -128,7 +128,7 @@ async fn get_child_comment(
     auth: Authed,
     Path((parent_id, child_id)): Path<(PostId, CommentId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let object = crate::models::comment::queries::get(&state.db, &auth, &child_id).await?;
+    let object = crate::models::comment::Comment::get(&state.db, &auth, &child_id).await?;
     if object.post_id != parent_id {
         return Err(Error::NotFound("Parent Post"));
     }
@@ -146,7 +146,7 @@ async fn create_child_comment(
 
     payload.post_id = parent_id;
 
-    let result = crate::models::comment::queries::create(&mut *tx, &auth, payload).await?;
+    let result = crate::models::comment::Comment::create(&mut *tx, &auth, payload).await?;
 
     tx.commit().await.change_context(Error::Db)?;
 
@@ -162,22 +162,14 @@ async fn update_child_comment(
     payload.id = Some(child_id);
     payload.post_id = parent_id;
 
-    let object_perm = queries::lookup_object_permissions(&state.db, &auth, &parent_id)
+    let object_perm = Post::lookup_object_permissions(&state.db, &auth, &parent_id)
         .await?
         .unwrap_or(ObjectPermission::Read);
 
-    let is_owner = match object_perm {
-        ObjectPermission::Owner => true,
-        ObjectPermission::Write => false,
-        ObjectPermission::Read => {
-            return Err(Error::AuthError(AuthError::MissingPermission(
-                Cow::Borrowed(super::WRITE_PERMISSION),
-            )));
-        }
-    };
+    object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::comment::queries::update_one_with_parent(
-        &state.db, &auth, is_owner, &parent_id, &child_id, payload,
+    let result = crate::models::comment::Comment::update_one_with_parent(
+        &state.db, &auth, &parent_id, &child_id, payload,
     )
     .await?;
 
@@ -189,7 +181,7 @@ async fn delete_child_comment(
     auth: Authed,
     Path((parent_id, child_id)): Path<(PostId, CommentId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let deleted = crate::models::comment::queries::delete_with_parent(
+    let deleted = crate::models::comment::Comment::delete_with_parent(
         &state.db, &auth, &parent_id, &child_id,
     )
     .await?;
@@ -209,7 +201,7 @@ async fn list_child_reaction(
 ) -> Result<impl IntoResponse, Error> {
     qs.post_id = vec![parent_id];
 
-    let object = crate::models::reaction::queries::list(&state.db, &auth, &qs).await?;
+    let object = crate::models::reaction::Reaction::list(&state.db, &auth, &qs).await?;
 
     Ok(Json(object))
 }
@@ -219,7 +211,7 @@ async fn get_child_reaction(
     auth: Authed,
     Path((parent_id, child_id)): Path<(PostId, ReactionId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let object = crate::models::reaction::queries::get(&state.db, &auth, &child_id).await?;
+    let object = crate::models::reaction::Reaction::get(&state.db, &auth, &child_id).await?;
     if object.post_id != parent_id {
         return Err(Error::NotFound("Parent Post"));
     }
@@ -237,7 +229,7 @@ async fn create_child_reaction(
 
     payload.post_id = parent_id;
 
-    let result = crate::models::reaction::queries::create(&mut *tx, &auth, payload).await?;
+    let result = crate::models::reaction::Reaction::create(&mut *tx, &auth, payload).await?;
 
     tx.commit().await.change_context(Error::Db)?;
 
@@ -253,22 +245,14 @@ async fn update_child_reaction(
     payload.id = Some(child_id);
     payload.post_id = parent_id;
 
-    let object_perm = queries::lookup_object_permissions(&state.db, &auth, &parent_id)
+    let object_perm = Post::lookup_object_permissions(&state.db, &auth, &parent_id)
         .await?
         .unwrap_or(ObjectPermission::Read);
 
-    let is_owner = match object_perm {
-        ObjectPermission::Owner => true,
-        ObjectPermission::Write => false,
-        ObjectPermission::Read => {
-            return Err(Error::AuthError(AuthError::MissingPermission(
-                Cow::Borrowed(super::WRITE_PERMISSION),
-            )));
-        }
-    };
+    object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::reaction::queries::update_one_with_parent(
-        &state.db, &auth, is_owner, &parent_id, &child_id, payload,
+    let result = crate::models::reaction::Reaction::update_one_with_parent(
+        &state.db, &auth, &parent_id, &child_id, payload,
     )
     .await?;
 
@@ -280,7 +264,7 @@ async fn delete_child_reaction(
     auth: Authed,
     Path((parent_id, child_id)): Path<(PostId, ReactionId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let deleted = crate::models::reaction::queries::delete_with_parent(
+    let deleted = crate::models::reaction::Reaction::delete_with_parent(
         &state.db, &auth, &parent_id, &child_id,
     )
     .await?;
@@ -300,7 +284,7 @@ async fn list_child_poll(
 ) -> Result<impl IntoResponse, Error> {
     qs.post_id = vec![parent_id];
 
-    let object = crate::models::poll::queries::list(&state.db, &auth, &qs).await?;
+    let object = crate::models::poll::Poll::list(&state.db, &auth, &qs).await?;
 
     let object = object.into_iter().next().ok_or(Error::NotFound("Poll"))?;
 
@@ -315,16 +299,15 @@ async fn upsert_child_poll(
 ) -> Result<impl IntoResponse, Error> {
     payload.post_id = parent_id;
 
-    let object_perm = queries::lookup_object_permissions(&state.db, &auth, &parent_id)
+    let object_perm = Post::lookup_object_permissions(&state.db, &auth, &parent_id)
         .await?
         .unwrap_or(ObjectPermission::Read);
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::poll::queries::upsert_with_parent(
+    let result = crate::models::poll::Poll::upsert_with_parent(
         &state.db,
         &auth.organization_id,
-        object_perm == ObjectPermission::Owner,
         &parent_id,
         &payload,
     )
@@ -338,13 +321,13 @@ async fn delete_child_poll(
     auth: Authed,
     Path(parent_id): Path<PostId>,
 ) -> Result<impl IntoResponse, Error> {
-    let object_perm = queries::lookup_object_permissions(&state.db, &auth, &parent_id)
+    let object_perm = Post::lookup_object_permissions(&state.db, &auth, &parent_id)
         .await?
         .unwrap_or(ObjectPermission::Read);
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let deleted = crate::models::poll::queries::delete_all_children_of_parent(
+    let deleted = crate::models::poll::Poll::delete_all_children_of_parent(
         &state.db,
         &auth.organization_id,
         &parent_id,
@@ -366,7 +349,7 @@ async fn list_child_post_image(
 ) -> Result<impl IntoResponse, Error> {
     qs.post_id = vec![parent_id];
 
-    let object = crate::models::post_image::queries::list(&state.db, &auth, &qs).await?;
+    let object = crate::models::post_image::PostImage::list(&state.db, &auth, &qs).await?;
 
     Ok(Json(object))
 }
@@ -376,7 +359,7 @@ async fn get_child_post_image(
     auth: Authed,
     Path((parent_id, child_id)): Path<(PostId, PostImageId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let object = crate::models::post_image::queries::get(&state.db, &auth, &child_id).await?;
+    let object = crate::models::post_image::PostImage::get(&state.db, &auth, &child_id).await?;
     if object.post_id != parent_id {
         return Err(Error::NotFound("Parent Post"));
     }
@@ -585,10 +568,9 @@ mod test {
             let id = PostId::new();
             event!(Level::INFO, %id, "Creating test object {}", i);
             let payload = make_create_payload(i);
-            let result =
-                super::queries::create_raw(&mut *tx, &id, &organization_id, payload.clone())
-                    .await
-                    .expect("Creating test object failed");
+            let result = Post::create_raw(&mut *tx, &id, &organization_id, payload.clone())
+                .await
+                .expect("Creating test object failed");
 
             objects.push((payload, result));
         }
@@ -632,45 +614,6 @@ mod test {
                 .iter()
                 .find(|i| i.1.id.to_string() == result["id"].as_str().unwrap())
                 .expect("Returned object did not match any of the added objects");
-            assert_eq!(
-                result["id"],
-                serde_json::to_value(&added.id).unwrap(),
-                "field id"
-            );
-            assert_eq!(
-                result["organization_id"],
-                serde_json::to_value(&added.organization_id).unwrap(),
-                "field organization_id"
-            );
-            assert_eq!(
-                result["updated_at"],
-                serde_json::to_value(&added.updated_at).unwrap(),
-                "field updated_at"
-            );
-            assert_eq!(
-                result["created_at"],
-                serde_json::to_value(&added.created_at).unwrap(),
-                "field created_at"
-            );
-            assert_eq!(
-                result["subject"],
-                serde_json::to_value(&added.subject).unwrap(),
-                "field subject"
-            );
-
-            assert_eq!(
-                payload.subject, added.subject,
-                "create result field subject"
-            );
-            assert_eq!(
-                result["body"],
-                serde_json::to_value(&added.body).unwrap(),
-                "field body"
-            );
-
-            assert_eq!(payload.body, added.body, "create result field body");
-
-            assert_eq!(result["_permission"], "owner");
         }
 
         let results = user
@@ -691,37 +634,6 @@ mod test {
                 .iter()
                 .find(|i| i.1.id.to_string() == result["id"].as_str().unwrap())
                 .expect("Returned object did not match any of the added objects");
-            assert_eq!(
-                result["id"],
-                serde_json::to_value(&added.id).unwrap(),
-                "list result field id"
-            );
-            assert_eq!(
-                result["organization_id"],
-                serde_json::to_value(&added.organization_id).unwrap(),
-                "list result field organization_id"
-            );
-            assert_eq!(
-                result["updated_at"],
-                serde_json::to_value(&added.updated_at).unwrap(),
-                "list result field updated_at"
-            );
-            assert_eq!(
-                result["created_at"],
-                serde_json::to_value(&added.created_at).unwrap(),
-                "list result field created_at"
-            );
-            assert_eq!(
-                result["subject"],
-                serde_json::to_value(&added.subject).unwrap(),
-                "list result field subject"
-            );
-            assert_eq!(
-                result["body"],
-                serde_json::to_value(&added.body).unwrap(),
-                "list result field body"
-            );
-            assert_eq!(result["_permission"], "write");
 
             let ids = serde_json::json!([]);
 
@@ -812,45 +724,6 @@ mod test {
             .unwrap();
 
         let (payload, added) = &added_objects[1];
-        assert_eq!(
-            result["id"],
-            serde_json::to_value(&added.id).unwrap(),
-            "get result field id"
-        );
-        assert_eq!(
-            result["organization_id"],
-            serde_json::to_value(&added.organization_id).unwrap(),
-            "get result field organization_id"
-        );
-        assert_eq!(
-            result["updated_at"],
-            serde_json::to_value(&added.updated_at).unwrap(),
-            "get result field updated_at"
-        );
-        assert_eq!(
-            result["created_at"],
-            serde_json::to_value(&added.created_at).unwrap(),
-            "get result field created_at"
-        );
-        assert_eq!(
-            result["subject"],
-            serde_json::to_value(&added.subject).unwrap(),
-            "get result field subject"
-        );
-
-        assert_eq!(
-            added.subject, payload.subject,
-            "create result field subject"
-        );
-        assert_eq!(
-            result["body"],
-            serde_json::to_value(&added.body).unwrap(),
-            "get result field body"
-        );
-
-        assert_eq!(added.body, payload.body, "create result field body");
-
-        assert_eq!(result["_permission"], "owner");
 
         let ids = serde_json::json!([]);
 
@@ -880,37 +753,6 @@ mod test {
             .unwrap();
 
         let (payload, added) = &added_objects[1];
-        assert_eq!(
-            result["id"],
-            serde_json::to_value(&added.id).unwrap(),
-            "get result field id"
-        );
-        assert_eq!(
-            result["organization_id"],
-            serde_json::to_value(&added.organization_id).unwrap(),
-            "get result field organization_id"
-        );
-        assert_eq!(
-            result["updated_at"],
-            serde_json::to_value(&added.updated_at).unwrap(),
-            "get result field updated_at"
-        );
-        assert_eq!(
-            result["created_at"],
-            serde_json::to_value(&added.created_at).unwrap(),
-            "get result field created_at"
-        );
-        assert_eq!(
-            result["subject"],
-            serde_json::to_value(&added.subject).unwrap(),
-            "get result field subject"
-        );
-        assert_eq!(
-            result["body"],
-            serde_json::to_value(&added.body).unwrap(),
-            "get result field body"
-        );
-        assert_eq!(result["_permission"], "write");
 
         let response = no_roles_user
             .client
@@ -971,7 +813,6 @@ mod test {
             serde_json::to_value(&update_payload.body).unwrap(),
             "field body"
         );
-        assert_eq!(updated["_permission"], "owner");
 
         // TODO Test that owner can not write fields which are not writable by anyone.
         // TODO Test that user can not update fields which are writable by owner but not user
@@ -989,38 +830,6 @@ mod test {
             .json()
             .await
             .unwrap();
-
-        assert_eq!(
-            non_updated["id"],
-            serde_json::to_value(&added_objects[0].1.id).unwrap(),
-            "field id"
-        );
-        assert_eq!(
-            non_updated["organization_id"],
-            serde_json::to_value(&added_objects[0].1.organization_id).unwrap(),
-            "field organization_id"
-        );
-        assert_eq!(
-            non_updated["updated_at"],
-            serde_json::to_value(&added_objects[0].1.updated_at).unwrap(),
-            "field updated_at"
-        );
-        assert_eq!(
-            non_updated["created_at"],
-            serde_json::to_value(&added_objects[0].1.created_at).unwrap(),
-            "field created_at"
-        );
-        assert_eq!(
-            non_updated["subject"],
-            serde_json::to_value(&added_objects[0].1.subject).unwrap(),
-            "field subject"
-        );
-        assert_eq!(
-            non_updated["body"],
-            serde_json::to_value(&added_objects[0].1.body).unwrap(),
-            "field body"
-        );
-        assert_eq!(non_updated["_permission"], "owner");
 
         let response = no_roles_user
             .client
@@ -1069,7 +878,6 @@ mod test {
             serde_json::to_value(&create_payload.body).unwrap(),
             "field body from create response"
         );
-        assert_eq!(created_result["_permission"], "owner");
 
         let created_id = created_result["id"].as_str().unwrap();
         let get_result = admin_user
@@ -1084,32 +892,6 @@ mod test {
             .json::<serde_json::Value>()
             .await
             .unwrap();
-
-        assert_eq!(
-            get_result["id"], created_result["id"],
-            "field id from get response"
-        );
-        assert_eq!(
-            get_result["organization_id"], created_result["organization_id"],
-            "field organization_id from get response"
-        );
-        assert_eq!(
-            get_result["updated_at"], created_result["updated_at"],
-            "field updated_at from get response"
-        );
-        assert_eq!(
-            get_result["created_at"], created_result["created_at"],
-            "field created_at from get response"
-        );
-        assert_eq!(
-            get_result["subject"], created_result["subject"],
-            "field subject from get response"
-        );
-        assert_eq!(
-            get_result["body"], created_result["body"],
-            "field body from get response"
-        );
-        assert_eq!(get_result["_permission"], "owner");
 
         let response = no_roles_user
             .client

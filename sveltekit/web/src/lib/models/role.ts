@@ -11,7 +11,6 @@ export const RoleSchema = z.object({
 	created_at: z.string().datetime(),
 	name: z.string(),
 	description: z.string().optional(),
-	_permission: ObjectPermission,
 });
 
 export type Role = z.infer<typeof RoleSchema>;

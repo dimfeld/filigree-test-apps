@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use error_stack::ResultExt;
 use filigree::{
-    auth::ObjectPermission,
+    auth::{AuthInfo as _, ObjectPermission},
     errors::OrderByError,
     sql::{BindingOperator, FilterBuilder, ValuesBuilder},
 };
@@ -19,47 +19,6 @@ use crate::{
     models::{organization::OrganizationId, post::PostId},
     Error,
 };
-
-type QueryAs<'q, T> = sqlx::query::QueryAs<
-    'q,
-    sqlx::Postgres,
-    T,
-    <sqlx::Postgres as sqlx::database::HasArguments<'q>>::Arguments,
->;
-
-fn check_missing_parent_error<T>(
-    result: Result<T, sqlx::Error>,
-) -> Result<T, error_stack::Report<Error>> {
-    match result {
-        Err(sqlx::Error::Database(e)) if e.constraint() == Some("polls_post_id_fkey") => {
-            Err(e).change_context(Error::NotFound("Parent Post"))
-        }
-        _ => result.change_context(Error::Db),
-    }
-}
-
-/// Get a Poll from the database
-#[instrument(skip(db))]
-pub async fn get(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    id: &PollId,
-) -> Result<Poll, error_stack::Report<Error>> {
-    let actor_ids = auth.actor_ids();
-    let object = query_file_as!(
-        Poll,
-        "src/models/poll/select_one.sql",
-        id.as_uuid(),
-        auth.organization_id.as_uuid(),
-        &actor_ids
-    )
-    .fetch_optional(db)
-    .await
-    .change_context(Error::Db)?
-    .ok_or(Error::NotFound("Poll"))?;
-
-    Ok(object)
-}
 
 #[derive(Debug, Default)]
 enum OrderByField {
@@ -126,7 +85,7 @@ pub struct ListQueryFilters {
 
 impl ListQueryFilters {
     fn build_where_clause(&self) -> String {
-        let mut bindings = FilterBuilder::new(5);
+        let mut bindings = FilterBuilder::new(4);
 
         if !self.id.is_empty() {
             bindings.add_vec("id", &self.id);
@@ -158,17 +117,6 @@ impl ListQueryFilters {
     }
 
     fn bind_to_query<'a, T>(&'a self, mut query: QueryAs<'a, T>) -> QueryAs<'a, T> {
-        const MAX_PER_PAGE: u32 = 200;
-        const DEFAULT_PER_PAGE: u32 = 50;
-        let per_page = self
-            .per_page
-            .unwrap_or(DEFAULT_PER_PAGE)
-            .min(MAX_PER_PAGE)
-            .max(1);
-        let offset = self.page.unwrap_or(0) * per_page;
-        event!(Level::DEBUG, per_page, offset);
-        query = query.bind(per_page as i32).bind(offset as i32);
-
         if !self.id.is_empty() {
             event!(Level::DEBUG, id = ?self.id);
             query = query.bind(&self.id);
@@ -203,307 +151,369 @@ impl ListQueryFilters {
     }
 }
 
-#[instrument(skip(db))]
-pub async fn list(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    filters: &ListQueryFilters,
-) -> Result<Vec<PollListResult>, error_stack::Report<Error>> {
-    let q = include_str!("list.sql");
-    list_internal(q, db, auth, filters).await
-}
+type QueryAs<'q, T> = sqlx::query::QueryAs<
+    'q,
+    sqlx::Postgres,
+    T,
+    <sqlx::Postgres as sqlx::database::HasArguments<'q>>::Arguments,
+>;
 
-async fn list_internal<T>(
-    query_template: &str,
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    filters: &ListQueryFilters,
-) -> Result<Vec<T>, error_stack::Report<Error>>
-where
-    T: for<'r> sqlx::FromRow<'r, PgRow> + Send + Unpin,
-{
-    let (descending, order_by_field) =
-        parse_order_by(filters.order_by.as_deref().unwrap_or("-updated_at"))
-            .change_context(Error::Filter)?;
-    let order_direction = if descending { "DESC" } else { "ASC" };
+impl Poll {
+    fn check_missing_parent_error<T>(
+        result: Result<T, sqlx::Error>,
+    ) -> Result<T, error_stack::Report<Error>> {
+        match result {
+            Err(sqlx::Error::Database(e)) if e.constraint() == Some("polls_post_id_fkey") => {
+                Err(e).change_context(Error::NotFound("Parent Post"))
+            }
+            _ => result.change_context(Error::Db),
+        }
+    }
 
-    let q = query_template.replace(
-        "__insertion_point_order_by",
-        &format!("{} {}", order_by_field.as_str(), order_direction),
-    );
+    /// Get a Poll from the database
+    #[instrument(skip(db))]
+    pub async fn get(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        id: &PollId,
+    ) -> Result<Poll, error_stack::Report<Error>> {
+        auth.require_permission(super::READ_PERMISSION)?;
 
-    let q = q.replace("__insertion_point_filters", &filters.build_where_clause());
+        let object = query_file_as!(
+            Poll,
+            "src/models/poll/select_one.sql",
+            id.as_uuid(),
+            auth.organization_id.as_uuid()
+        )
+        .fetch_optional(db)
+        .await
+        .change_context(Error::Db)?
+        .ok_or(Error::NotFound("Poll"))?;
 
-    let mut query = sqlx::query_as::<_, T>(q.as_str());
+        Ok(object)
+    }
 
-    let actor_ids = auth.actor_ids();
-    event!(Level::DEBUG, organization_id=%auth.organization_id, actor_ids=?actor_ids);
-    query = query.bind(&auth.organization_id).bind(&actor_ids);
+    #[instrument(skip(db))]
+    pub async fn list(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        filters: &ListQueryFilters,
+    ) -> Result<Vec<PollListResult>, error_stack::Report<Error>> {
+        let q = include_str!("list.sql");
+        Self::list_internal(q, db, auth, filters).await
+    }
 
-    query = filters.bind_to_query(query);
+    async fn list_internal<T>(
+        query_template: &str,
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        filters: &ListQueryFilters,
+    ) -> Result<Vec<T>, error_stack::Report<Error>>
+    where
+        T: for<'r> sqlx::FromRow<'r, PgRow> + Send + Unpin,
+    {
+        auth.require_permission(super::READ_PERMISSION)?;
 
-    let results = query.fetch_all(db).await.change_context(Error::Db)?;
+        const MAX_PER_PAGE: u32 = 200;
+        const DEFAULT_PER_PAGE: u32 = 50;
+        let per_page = filters
+            .per_page
+            .unwrap_or(DEFAULT_PER_PAGE)
+            .min(MAX_PER_PAGE)
+            .max(1) as i32;
+        let offset = filters.page.unwrap_or(0) as i32 * per_page;
+        event!(Level::DEBUG, per_page, offset);
 
-    Ok(results)
-}
+        let (descending, order_by_field) =
+            parse_order_by(filters.order_by.as_deref().unwrap_or("-updated_at"))
+                .change_context(Error::Filter)?;
+        let order_direction = if descending { "DESC" } else { "ASC" };
 
-/// Create a new Poll in the database.
-pub async fn create(
-    db: &mut PgConnection,
-    auth: &AuthInfo,
-    payload: PollCreatePayload,
-) -> Result<PollCreateResult, error_stack::Report<Error>> {
-    // TODO create permissions auth check
+        let q = query_template.replace(
+            "__insertion_point_order_by",
+            &format!("{} {}", order_by_field.as_str(), order_direction),
+        );
 
-    let id = PollId::new();
+        let q = q.replace("__insertion_point_filters", &filters.build_where_clause());
 
-    create_raw(&mut *db, &id, &auth.organization_id, payload).await
-}
+        let mut query = sqlx::query_as::<_, T>(q.as_str());
 
-/// Create a new Poll in the database, allowing the ID to be explicitly specified
-/// regardless of whether it would normally be allowed.
-#[instrument(skip(db))]
-pub async fn create_raw(
-    db: &mut PgConnection,
-    id: &PollId,
-    organization_id: &OrganizationId,
-    payload: PollCreatePayload,
-) -> Result<PollCreateResult, error_stack::Report<Error>> {
-    let result = query_file_as!(
-        Poll,
-        "src/models/poll/insert.sql",
-        id.as_uuid(),
-        organization_id.as_uuid(),
-        &payload.question,
-        &payload.answers,
-        &payload.post_id as _,
-    )
-    .fetch_one(&mut *db)
-    .await;
-
-    let result = check_missing_parent_error(result)?;
-
-    Ok(result)
-}
-
-#[instrument(skip(db))]
-pub async fn update(
-    db: &mut PgConnection,
-    auth: &AuthInfo,
-    id: &PollId,
-    payload: PollUpdatePayload,
-) -> Result<bool, error_stack::Report<Error>> {
-    let actor_ids = auth.actor_ids();
-    let result = query_file_scalar!(
-        "src/models/poll/update.sql",
-        id.as_uuid(),
-        auth.organization_id.as_uuid(),
-        &actor_ids,
-        &payload.question as _,
-        &payload.answers as _,
-        &payload.post_id as _,
-    )
-    .fetch_optional(&mut *db)
-    .await
-    .change_context(Error::Db)?;
-
-    let Some(is_owner) = result else {
-        return Ok(false);
-    };
-
-    Ok(true)
-}
-
-#[instrument(skip(db))]
-pub async fn delete(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    id: &PollId,
-) -> Result<bool, error_stack::Report<Error>> {
-    let actor_ids = auth.actor_ids();
-    let result = query_file!(
-        "src/models/poll/delete.sql",
-        id.as_uuid(),
-        auth.organization_id.as_uuid(),
-        &actor_ids
-    )
-    .execute(db)
-    .await
-    .change_context(Error::Db)?;
-    Ok(result.rows_affected() > 0)
-}
-
-#[instrument(skip(db))]
-pub async fn lookup_object_permissions(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    #[allow(unused_variables)] id: &PollId,
-) -> Result<Option<ObjectPermission>, error_stack::Report<Error>> {
-    let actor_ids = auth.actor_ids();
-    let result = query_file_scalar!(
-        "src/models/poll/lookup_object_permissions.sql",
-        auth.organization_id.as_uuid(),
-        &actor_ids,
-    )
-    .fetch_one(db)
-    .await
-    .change_context(Error::Db)?;
-
-    let perm = result.and_then(|r| ObjectPermission::from_str_infallible(&r));
-    Ok(perm)
-}
-
-/// Update or insert a child of the given parent.
-
-#[instrument(skip(db))]
-pub async fn upsert_with_parent(
-    db: impl PgExecutor<'_>,
-    organization_id: &OrganizationId,
-    is_owner: bool,
-    parent_id: &PostId,
-    payload: &PollUpdatePayload,
-) -> Result<Poll, error_stack::Report<Error>> {
-    let id = payload.id.clone().unwrap_or_else(PollId::new);
-    let result = query_file_as!(
-        Poll,
-        "src/models/poll/upsert_single_child.sql",
-        id.as_uuid(),
-        organization_id.as_uuid(),
-        &payload.question,
-        &payload.answers,
-        &payload.post_id as _,
-    )
-    .fetch_one(db)
-    .await;
-    check_missing_parent_error(result)
-}
-
-/// Update a single child of the given parent. This does nothing if the child doesn't exist.
-#[instrument(skip(db))]
-pub async fn update_one_with_parent(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    is_owner: bool,
-    parent_id: &PostId,
-    id: &PollId,
-    mut payload: PollUpdatePayload,
-) -> Result<bool, error_stack::Report<Error>> {
-    payload.post_id = parent_id.clone();
-
-    let actor_ids = auth.actor_ids();
-    let result = query_file!(
-        "src/models/poll/update_one_with_parent.sql",
-        id.as_uuid(),
-        parent_id.as_uuid(),
-        auth.organization_id.as_uuid(),
-        &actor_ids,
-        &payload.question as _,
-        &payload.answers as _,
-    )
-    .execute(db)
-    .await
-    .change_context(Error::Db)?;
-
-    Ok(result.rows_affected() > 0)
-}
-
-/// Update the children of the given parent.
-/// Insert new values that are not yet in the database and
-/// delete existing values that are not in the payload.
-#[instrument(skip(db))]
-pub async fn update_all_with_parent(
-    db: &mut PgConnection,
-    organization_id: &OrganizationId,
-    is_owner: bool,
-    parent_id: &PostId,
-    payload: &[PollUpdatePayload],
-) -> Result<Vec<Poll>, error_stack::Report<Error>> {
-    if payload.is_empty() {
-        delete_all_children_of_parent(db, organization_id, parent_id).await?;
-        Ok(Vec::new())
-    } else {
-        // First, we upsert the existing children.
-        let q = include_str!("upsert_children.sql");
-        let bindings = ValuesBuilder {
-            first_parameter: 4,
-            num_values: payload.len(),
-            num_columns: 2 + 3,
-        };
-        let q = q.replace("__insertion_point_insert_values", &bindings.to_string());
-
-        let mut query = sqlx::query_as::<_, Poll>(q.as_str());
-
+        event!(Level::DEBUG, organization_id=%auth.organization_id);
         query = query
-            .bind(is_owner)
-            .bind(organization_id)
-            .bind(parent_id.as_uuid());
+            .bind(&auth.organization_id)
+            .bind(per_page)
+            .bind(offset);
 
-        for p in payload {
-            let id = p.id.unwrap_or_else(|| PollId::new());
-            query = query
-                .bind(id)
-                .bind(organization_id)
-                .bind(&p.question)
-                .bind(&p.answers)
-                .bind(&p.post_id)
+        query = filters.bind_to_query(query);
+
+        let results = query.fetch_all(db).await.change_context(Error::Db)?;
+
+        Ok(results)
+    }
+
+    /// Create a new Poll in the database.
+    pub async fn create(
+        db: &mut PgConnection,
+        auth: &AuthInfo,
+        payload: PollCreatePayload,
+    ) -> Result<PollCreateResult, error_stack::Report<Error>> {
+        auth.require_permission(super::CREATE_PERMISSION)?;
+
+        let id = PollId::new();
+
+        Self::create_raw(&mut *db, &id, &auth.organization_id, payload).await
+    }
+
+    /// Create a new Poll in the database, allowing the ID to be explicitly specified
+    /// regardless of whether it would normally be allowed.
+    #[instrument(skip(db))]
+    pub async fn create_raw(
+        db: &mut PgConnection,
+        id: &PollId,
+        organization_id: &OrganizationId,
+        payload: PollCreatePayload,
+    ) -> Result<PollCreateResult, error_stack::Report<Error>> {
+        let result = query_file_as!(
+            Poll,
+            "src/models/poll/insert.sql",
+            id.as_uuid(),
+            organization_id.as_uuid(),
+            &payload.question as _,
+            &payload.answers as _,
+            &payload.post_id as _
+        )
+        .fetch_one(&mut *db)
+        .await;
+
+        let result = Self::check_missing_parent_error(result)?;
+
+        Ok(result)
+    }
+
+    #[instrument(skip(db))]
+    pub async fn update(
+        db: &mut PgConnection,
+        auth: &AuthInfo,
+        id: &PollId,
+        payload: PollUpdatePayload,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+
+        let result = query_file_scalar!(
+            "src/models/poll/update.sql",
+            id.as_uuid(),
+            &payload.question as _,
+            &payload.answers as _,
+            &payload.post_id as _,
+            auth.organization_id.as_uuid()
+        )
+        .execute(&mut *db)
+        .await
+        .change_context(Error::Db)?;
+
+        if result.rows_affected() == 0 {
+            return Ok(false);
         }
 
-        let results = query.fetch_all(&mut *db).await;
-        let results = check_missing_parent_error(results)?;
+        Ok(true)
+    }
 
-        // Delete any of the children that were not sent in.
-        let ids = results
-            .iter()
-            .map(|o| o.id.as_uuid().clone())
-            .collect::<Vec<_>>();
-        query_file!(
-            "src/models/poll/delete_removed_children.sql",
+    #[instrument(skip(db))]
+    pub async fn delete(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        id: &PollId,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        auth.require_permission(super::CREATE_PERMISSION)?;
+
+        let result = query_file!(
+            "src/models/poll/delete.sql",
+            id.as_uuid(),
+            auth.organization_id.as_uuid()
+        )
+        .execute(db)
+        .await
+        .change_context(Error::Db)?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    #[instrument(skip(db))]
+    pub async fn lookup_object_permissions(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        #[allow(unused_variables)] id: &PollId,
+    ) -> Result<Option<ObjectPermission>, error_stack::Report<Error>> {
+        let mut saw_write = false;
+        let mut saw_read = false;
+
+        use super::{OWNER_PERMISSION, READ_PERMISSION, WRITE_PERMISSION};
+
+        for perm in &auth.permissions {
+            if perm == OWNER_PERMISSION {
+                return Ok(Some(ObjectPermission::Owner));
+            } else if perm == WRITE_PERMISSION {
+                saw_write = true;
+            } else if perm == READ_PERMISSION {
+                saw_read = true;
+            }
+        }
+
+        if saw_write {
+            return Ok(Some(ObjectPermission::Write));
+        } else if saw_read {
+            return Ok(Some(ObjectPermission::Read));
+        } else {
+            return Ok(None);
+        }
+    }
+
+    /// Update or insert a child of the given parent.
+
+    #[instrument(skip(db))]
+    pub async fn upsert_with_parent(
+        db: impl PgExecutor<'_>,
+        organization_id: &OrganizationId,
+        parent_id: &PostId,
+        payload: &PollUpdatePayload,
+    ) -> Result<Poll, error_stack::Report<Error>> {
+        let id = payload.id.clone().unwrap_or_else(PollId::new);
+        let result = query_file_as!(
+            Poll,
+            "src/models/poll/upsert_single_child.sql",
+            id.as_uuid(),
             organization_id.as_uuid(),
+            &payload.question as _,
+            &payload.answers as _,
+            &payload.post_id as _,
+            parent_id.as_uuid()
+        )
+        .fetch_one(db)
+        .await;
+        Self::check_missing_parent_error(result)
+    }
+
+    /// Update a single child of the given parent. This does nothing if the child doesn't exist.
+    #[instrument(skip(db))]
+    pub async fn update_one_with_parent(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        parent_id: &PostId,
+        id: &PollId,
+        mut payload: PollUpdatePayload,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        payload.post_id = parent_id.clone();
+
+        let actor_ids = auth.actor_ids();
+        let result = query_file!(
+            "src/models/poll/update_one_with_parent.sql",
+            id.as_uuid(),
+            &payload.question as _,
+            &payload.answers as _,
+            &payload.post_id as _,
             parent_id.as_uuid(),
-            &ids
+            auth.organization_id.as_uuid()
         )
         .execute(db)
         .await
         .change_context(Error::Db)?;
 
-        Ok(results)
+        Ok(result.rows_affected() > 0)
     }
-}
 
-/// Delete a child object, making sure that its parent ID matches.
-#[instrument(skip(db))]
-pub async fn delete_with_parent(
-    db: impl PgExecutor<'_>,
-    auth: &AuthInfo,
-    parent_id: &PostId,
-    child_id: &PollId,
-) -> Result<bool, error_stack::Report<Error>> {
-    let result = query_file!(
-        "src/models/poll/delete_with_parent.sql",
-        auth.organization_id.as_uuid(),
-        parent_id.as_uuid(),
-        child_id.as_uuid(),
-    )
-    .execute(db)
-    .await
-    .change_context(Error::Db)?;
-    Ok(result.rows_affected() > 0)
-}
+    /// Update the children of the given parent.
+    /// Insert new values that are not yet in the database and
+    /// delete existing values that are not in the payload.
+    #[instrument(skip(db))]
+    pub async fn update_all_with_parent(
+        db: &mut PgConnection,
+        organization_id: &OrganizationId,
+        parent_id: &PostId,
+        payload: &[PollUpdatePayload],
+    ) -> Result<Vec<Poll>, error_stack::Report<Error>> {
+        if payload.is_empty() {
+            Self::delete_all_children_of_parent(db, organization_id, parent_id).await?;
+            Ok(Vec::new())
+        } else {
+            // First, we upsert the existing children.
+            let q = include_str!("upsert_children.sql");
+            let bindings = ValuesBuilder {
+                first_parameter: 3,
+                num_values: payload.len(),
+                num_columns: 2 + 3,
+            };
+            let q = q.replace("__insertion_point_insert_values", &bindings.to_string());
 
-/// Delete all children of the given parent. This function does not do permissions checks.
-#[instrument(skip(db))]
-pub async fn delete_all_children_of_parent(
-    db: impl PgExecutor<'_>,
-    organization_id: &OrganizationId,
-    parent_id: &PostId,
-) -> Result<bool, error_stack::Report<Error>> {
-    let result = query_file!(
-        "src/models/poll/delete_all_children.sql",
-        organization_id.as_uuid(),
-        parent_id.as_uuid()
-    )
-    .execute(db)
-    .await
-    .change_context(Error::Db)?;
-    Ok(result.rows_affected() > 0)
+            let mut query = sqlx::query_as::<_, Poll>(q.as_str());
+
+            query = query.bind(organization_id).bind(parent_id.as_uuid());
+
+            for p in payload {
+                let id = p.id.unwrap_or_else(|| PollId::new());
+                query = query
+                    .bind(id)
+                    .bind(organization_id)
+                    .bind(&p.question)
+                    .bind(&p.answers)
+                    .bind(&p.post_id)
+            }
+
+            let results = query.fetch_all(&mut *db).await;
+            let results = Self::check_missing_parent_error(results)?;
+
+            // Delete any of the children that were not sent in.
+            let ids = results
+                .iter()
+                .map(|o| o.id.as_uuid().clone())
+                .collect::<Vec<_>>();
+            query_file!(
+                "src/models/poll/delete_removed_children.sql",
+                organization_id.as_uuid(),
+                parent_id.as_uuid(),
+                &ids
+            )
+            .execute(db)
+            .await
+            .change_context(Error::Db)?;
+
+            Ok(results)
+        }
+    }
+
+    /// Delete a child object, making sure that its parent ID matches.
+    #[instrument(skip(db))]
+    pub async fn delete_with_parent(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        parent_id: &PostId,
+        child_id: &PollId,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        let result = query_file!(
+            "src/models/poll/delete_with_parent.sql",
+            auth.organization_id.as_uuid(),
+            parent_id.as_uuid(),
+            child_id.as_uuid()
+        )
+        .execute(db)
+        .await
+        .change_context(Error::Db)?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Delete all children of the given parent. This function does not do permissions checks.
+    #[instrument(skip(db))]
+    pub async fn delete_all_children_of_parent(
+        db: impl PgExecutor<'_>,
+        organization_id: &OrganizationId,
+        parent_id: &PostId,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        let result = query_file!(
+            "src/models/poll/delete_all_children.sql",
+            organization_id.as_uuid(),
+            parent_id.as_uuid()
+        )
+        .execute(db)
+        .await
+        .change_context(Error::Db)?;
+        Ok(result.rows_affected() > 0)
+    }
 }

@@ -9,8 +9,7 @@ use sqlx_transparent_json_decode::sqlx_json_decode;
 use super::PostImageId;
 use crate::models::{organization::OrganizationId, post::PostId};
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct PostImage {
     pub id: PostImageId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -22,7 +21,6 @@ pub struct PostImage {
     pub file_size: Option<i64>,
     pub file_hash: Option<Vec<u8>>,
     pub post_id: PostId,
-    pub _permission: ObjectPermission,
 }
 
 pub type PostImageListResult = PostImage;
@@ -93,26 +91,7 @@ impl Default for PostImage {
             file_size: Self::default_file_size(),
             file_hash: Self::default_file_hash(),
             post_id: Self::default_post_id(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for PostImage {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("PostImage", 8)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("file_size", &self.file_size)?;
-        state.serialize_field("file_hash", &self.file_hash)?;
-        state.serialize_field("post_id", &self.post_id)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }
 

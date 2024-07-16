@@ -1,6 +1,3 @@
--- $1 = has owner permission on the model
--- $2 = organization_id
--- $3 = parent_id
 INSERT INTO public.comments (
   id,
   organization_id,
@@ -15,13 +12,12 @@ ON CONFLICT (
     post_id = EXCLUDED.post_id,
     updated_at = now()
   WHERE
-    comments.organization_id = $2
-    AND comments.post_id = $3
+    comments.organization_id = $1
+    AND comments.post_id = $2
   RETURNING
     id,
     organization_id,
     updated_at,
     created_at,
     body,
-    post_id,
-    'owner' AS "_permission"
+    post_id

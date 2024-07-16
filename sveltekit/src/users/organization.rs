@@ -5,8 +5,8 @@ use sqlx::PgConnection;
 
 use crate::{
     models::{
-        organization::{self, Organization, OrganizationCreatePayload, OrganizationId},
-        role::{self, RoleId},
+        organization::{Organization, OrganizationCreatePayload, OrganizationId},
+        role::{self, Role, RoleId},
         user::UserId,
     },
     Error,
@@ -16,24 +16,34 @@ const ADMIN_DEFAULT_PERMISSIONS: &[&str] = &["org_admin"];
 const USER_DEFAULT_PERMISSIONS: &[&str] = &[
     "Comment::read",
     "Comment::write",
+    "Comment::owner",
     "Poll::read",
     "Poll::write",
+    "Poll::owner",
     "PostImage::read",
     "PostImage::write",
+    "PostImage::owner",
     "Reaction::read",
     "Reaction::write",
+    "Reaction::owner",
     "Post::read",
     "Post::write",
+    "Post::owner",
     "ReportSection::read",
     "ReportSection::write",
+    "ReportSection::owner",
     "Report::read",
     "Report::write",
+    "Report::owner",
     "Role::read",
     "Role::write",
+    "Role::owner",
     "Organization::read",
     "Organization::write",
+    "Organization::owner",
     "User::read",
     "User::write",
+    "User::owner",
 ];
 
 pub struct CreatedOrganization {
@@ -68,7 +78,7 @@ pub async fn create_new_organization(
         ..Default::default()
     };
 
-    let new_org = organization::queries::create_raw(&mut *db, &org_id, &org_id, new_org).await?;
+    let new_org = Organization::create_raw(&mut *db, &org_id, &org_id, new_org).await?;
 
     add_user_to_organization(&mut *db, org_id, owner)
         .await
@@ -86,8 +96,8 @@ pub async fn create_new_organization(
         description: None,
     };
 
-    role::queries::create_raw(&mut *db, &admin_role_id, &org_id, admin_role).await?;
-    role::queries::create_raw(&mut *db, &user_role_id, &org_id, user_role).await?;
+    Role::create_raw(&mut *db, &admin_role_id, &org_id, admin_role).await?;
+    Role::create_raw(&mut *db, &user_role_id, &org_id, user_role).await?;
     add_roles_to_user(&mut *db, org_id, owner, &[admin_role_id, user_role_id])
         .await
         .change_context(Error::Db)?;

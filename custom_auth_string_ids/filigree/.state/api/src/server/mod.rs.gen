@@ -8,7 +8,7 @@ use std::{
 use axum::{extract::FromRef, handler::Handler, routing::get, Router};
 use error_stack::{Report, ResultExt};
 use filigree::{
-    auth::{CorsSetting, ExpiryStyle, SessionBackend, SessionCookieBuilder},
+    auth::{CorsSetting, ExpiryStyle, SessionCookieBuilder},
     error_reporting::ErrorReporter,
     errors::{panic_handler, ObfuscateErrorLayer, ObfuscateErrorLayerSettings},
     requests::MakeRequestUuidV7,
@@ -97,12 +97,6 @@ impl FromRef<ServerState> for Arc<FiligreeState> {
 impl FromRef<ServerState> for PgPool {
     fn from_ref(inner: &ServerState) -> Self {
         inner.0.db.clone()
-    }
-}
-
-impl FromRef<ServerState> for SessionBackend {
-    fn from_ref(inner: &ServerState) -> Self {
-        inner.0.session_backend.clone()
     }
 }
 
@@ -289,11 +283,6 @@ pub async fn create_server(config: Config) -> Result<Server, Report<Error>> {
             email: config.email_sender,
             hosts: config.hosts,
 
-            session_backend: SessionBackend::new(
-                config.pg_pool.clone(),
-                config.cookie_configuration,
-                config.session_expiry,
-            ),
             error_reporter: ErrorReporter::Sentry,
         }),
         insecure: config.insecure,

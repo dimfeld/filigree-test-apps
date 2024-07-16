@@ -26,5 +26,4 @@ RETURNING
   file_original_name,
   file_size,
   file_hash,
-  post_id AS "post_id: PostId",
-  'owner' AS "_permission!: filigree::auth::ObjectPermission"
+  post_id AS "post_id: PostId"

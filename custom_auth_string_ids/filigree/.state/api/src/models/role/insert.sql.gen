@@ -14,5 +14,4 @@ RETURNING
   updated_at,
   created_at,
   name,
-  description,
-  'owner' AS "_permission!: filigree::auth::ObjectPermission"
+  description

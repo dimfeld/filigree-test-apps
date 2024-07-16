@@ -8,8 +8,7 @@ use sqlx_transparent_json_decode::sqlx_json_decode;
 
 use super::OrganizationId;
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct Organization {
     pub id: OrganizationId,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -18,7 +17,6 @@ pub struct Organization {
     pub owner: Option<crate::models::user::UserId>,
     pub default_role: Option<crate::models::role::RoleId>,
     pub active: bool,
-    pub _permission: ObjectPermission,
 }
 
 pub type OrganizationListResult = Organization;
@@ -74,34 +72,6 @@ impl Default for Organization {
             owner: Self::default_owner(),
             default_role: Self::default_default_role(),
             active: Self::default_active(),
-            _permission: ObjectPermission::Owner,
-        }
-    }
-}
-
-impl Serialize for Organization {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        if self._permission == ObjectPermission::Owner {
-            let mut state = serializer.serialize_struct("Organization", 7)?;
-            state.serialize_field("id", &self.id)?;
-            state.serialize_field("updated_at", &self.updated_at)?;
-            state.serialize_field("created_at", &self.created_at)?;
-            state.serialize_field("name", &self.name)?;
-            state.serialize_field("owner", &self.owner)?;
-            state.serialize_field("default_role", &self.default_role)?;
-            state.serialize_field("_permission", &self._permission)?;
-            state.end()
-        } else {
-            let mut state = serializer.serialize_struct("Organization", 5)?;
-            state.serialize_field("id", &self.id)?;
-            state.serialize_field("updated_at", &self.updated_at)?;
-            state.serialize_field("created_at", &self.created_at)?;
-            state.serialize_field("name", &self.name)?;
-            state.serialize_field("_permission", &self._permission)?;
-            state.end()
         }
     }
 }

@@ -20,5 +20,4 @@ RETURNING
   name,
   viz,
   options,
-  report_id AS "report_id: ReportId",
-  'owner' AS "_permission!: filigree::auth::ObjectPermission"
+  report_id AS "report_id: ReportId"

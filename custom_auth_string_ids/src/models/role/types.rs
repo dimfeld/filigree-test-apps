@@ -9,8 +9,7 @@ use sqlx_transparent_json_decode::sqlx_json_decode;
 use super::RoleId;
 use crate::models::organization::OrganizationId;
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct Role {
     pub id: RoleId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -18,7 +17,6 @@ pub struct Role {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub name: String,
     pub description: Option<String>,
-    pub _permission: ObjectPermission,
 }
 
 pub type RoleListResult = Role;
@@ -69,25 +67,7 @@ impl Default for Role {
             created_at: Self::default_created_at(),
             name: Self::default_name(),
             description: Self::default_description(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for Role {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Role", 7)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("description", &self.description)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }
 

@@ -9,8 +9,7 @@ use sqlx_transparent_json_decode::sqlx_json_decode;
 use super::PollId;
 use crate::models::{organization::OrganizationId, post::PostId};
 
-#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow)]
-
+#[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
 pub struct Poll {
     pub id: PollId,
     pub organization_id: crate::models::organization::OrganizationId,
@@ -19,7 +18,6 @@ pub struct Poll {
     pub question: String,
     pub answers: serde_json::Value,
     pub post_id: PostId,
-    pub _permission: ObjectPermission,
 }
 
 pub type PollListResult = Poll;
@@ -75,26 +73,7 @@ impl Default for Poll {
             question: Self::default_question(),
             answers: Self::default_answers(),
             post_id: Self::default_post_id(),
-            _permission: ObjectPermission::Owner,
         }
-    }
-}
-
-impl Serialize for Poll {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Poll", 8)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("organization_id", &self.organization_id)?;
-        state.serialize_field("updated_at", &self.updated_at)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.serialize_field("question", &self.question)?;
-        state.serialize_field("answers", &self.answers)?;
-        state.serialize_field("post_id", &self.post_id)?;
-        state.serialize_field("_permission", &self._permission)?;
-        state.end()
     }
 }
 

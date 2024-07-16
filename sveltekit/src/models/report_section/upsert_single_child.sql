@@ -22,7 +22,7 @@ ON CONFLICT (
     updated_at = now()
   WHERE
     report_sections.organization_id = $2
-    AND report_sections.report_id = EXCLUDED.report_id
+    AND report_sections.report_id = $7
   RETURNING
     id AS "id: ReportSectionId",
     organization_id AS "organization_id: crate::models::organization::OrganizationId",
@@ -31,5 +31,4 @@ ON CONFLICT (
     name,
     viz,
     options,
-    report_id AS "report_id: ReportId",
-    'owner' AS "_permission!: filigree::auth::ObjectPermission"
+    report_id AS "report_id: ReportId"

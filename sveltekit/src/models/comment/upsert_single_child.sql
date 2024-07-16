@@ -16,12 +16,11 @@ ON CONFLICT (
     updated_at = now()
   WHERE
     comments.organization_id = $2
-    AND comments.post_id = EXCLUDED.post_id
+    AND comments.post_id = $5
   RETURNING
     id AS "id: CommentId",
     organization_id AS "organization_id: crate::models::organization::OrganizationId",
     updated_at,
     created_at,
     body,
-    post_id AS "post_id: PostId",
-    'owner' AS "_permission!: filigree::auth::ObjectPermission"
+    post_id AS "post_id: PostId"

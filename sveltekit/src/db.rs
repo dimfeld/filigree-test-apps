@@ -11,7 +11,7 @@ use sqlx::{PgConnection, PgPool};
 use crate::{
     models::{
         organization::OrganizationId,
-        role::{self, RoleId},
+        role::{self, Role, RoleId},
         user::{UserCreatePayload, UserId},
     },
     users::{
@@ -125,7 +125,7 @@ async fn create_superuser_role(
     .await
     .change_context(Error::Db)?;
 
-    role::queries::create_raw(tx, &superuser_role_id, &org_id, superuser_role).await?;
+    Role::create_raw(tx, &superuser_role_id, &org_id, superuser_role).await?;
 
     Ok(superuser_role_id)
 }

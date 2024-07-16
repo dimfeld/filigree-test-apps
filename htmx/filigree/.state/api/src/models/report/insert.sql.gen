@@ -17,5 +17,4 @@ RETURNING
   created_at,
   title,
   description,
-  ui,
-  'owner' AS "_permission!: filigree::auth::ObjectPermission"
+  ui
