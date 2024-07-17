@@ -8,6 +8,7 @@ use crate::models::post::PostId;
 pub fn make_create_payload(i: usize) -> PostImageCreatePayload {
     PostImageCreatePayload {
         id: None,
+
         file_storage_key: format!("Test object {i}"),
         file_storage_bucket: format!("Test object {i}"),
         file_original_name: (i > 1).then(|| format!("Test object {i}")),
@@ -23,6 +24,7 @@ pub fn make_create_payload(i: usize) -> PostImageCreatePayload {
 pub fn make_update_payload(i: usize) -> PostImageUpdatePayload {
     PostImageUpdatePayload {
         id: None,
+
         file_storage_key: format!("Test object {i}"),
         file_storage_bucket: format!("Test object {i}"),
         file_original_name: Some(format!("Test object {i}")),

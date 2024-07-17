@@ -276,9 +276,9 @@ impl Role {
 
         let result = query_file_scalar!(
             "src/models/role/update.sql",
-            id.as_uuid(),
             &payload.name as _,
             payload.description.as_ref() as _,
+            id.as_uuid(),
             auth.organization_id.as_uuid()
         )
         .execute(&mut *db)

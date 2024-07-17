@@ -8,6 +8,7 @@ use crate::models::report::ReportId;
 pub fn make_create_payload(i: usize) -> ReportSectionCreatePayload {
     ReportSectionCreatePayload {
         id: None,
+
         name: format!("Test object {i}"),
         viz: format!("Test object {i}"),
         options: serde_json::json!({ "key": i }),
@@ -21,6 +22,7 @@ pub fn make_create_payload(i: usize) -> ReportSectionCreatePayload {
 pub fn make_update_payload(i: usize) -> ReportSectionUpdatePayload {
     ReportSectionUpdatePayload {
         id: None,
+
         name: format!("Test object {i}"),
         viz: format!("Test object {i}"),
         options: serde_json::json!({ "key": i }),

@@ -1,10 +1,10 @@
 UPDATE
   myapp.polls
 SET
-  question = $2,
-  answers = $3,
-  post_id = $4,
+  question = $1,
+  answers = $2,
+  post_id = $3,
   updated_at = NOW()
 WHERE
-  id = $1
+  id = $4
   AND organization_id = $5

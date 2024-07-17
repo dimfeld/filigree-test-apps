@@ -275,10 +275,10 @@ impl Organization {
 
         let result = query_file_scalar!(
             "src/models/organization/update.sql",
-            id.as_uuid(),
             &payload.name as _,
             payload.owner.as_ref() as _,
-            payload.default_role.as_ref() as _
+            payload.default_role.as_ref() as _,
+            id.as_uuid()
         )
         .execute(&mut *db)
         .await

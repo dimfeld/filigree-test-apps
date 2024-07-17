@@ -57,6 +57,21 @@ pub const PERMISSIONS: &[PermissionInfo] = &[
         key: "PostImage::owner",
     },
     PermissionInfo {
+        name: "Read PostTags",
+        description: "List and read PostTag objects",
+        key: "PostTag::read",
+    },
+    PermissionInfo {
+        name: "Write PostTags",
+        description: "Write PostTag objects",
+        key: "PostTag::write",
+    },
+    PermissionInfo {
+        name: "Administer PostTags",
+        description: "Create and delete PostTag objects",
+        key: "PostTag::owner",
+    },
+    PermissionInfo {
         name: "Read Reactions",
         description: "List and read Reaction objects",
         key: "Reaction::read",
@@ -102,6 +117,21 @@ pub const PERMISSIONS: &[PermissionInfo] = &[
         key: "ReportSection::owner",
     },
     PermissionInfo {
+        name: "Read ReportTags",
+        description: "List and read ReportTag objects",
+        key: "ReportTag::read",
+    },
+    PermissionInfo {
+        name: "Write ReportTags",
+        description: "Write ReportTag objects",
+        key: "ReportTag::write",
+    },
+    PermissionInfo {
+        name: "Administer ReportTags",
+        description: "Create and delete ReportTag objects",
+        key: "ReportTag::owner",
+    },
+    PermissionInfo {
         name: "Read Reports",
         description: "List and read Report objects",
         key: "Report::read",
@@ -130,6 +160,21 @@ pub const PERMISSIONS: &[PermissionInfo] = &[
         name: "Administer Roles",
         description: "Create and delete Role objects",
         key: "Role::owner",
+    },
+    PermissionInfo {
+        name: "Read Tags",
+        description: "List and read Tag objects",
+        key: "Tag::read",
+    },
+    PermissionInfo {
+        name: "Write Tags",
+        description: "Write Tag objects",
+        key: "Tag::write",
+    },
+    PermissionInfo {
+        name: "Administer Tags",
+        description: "Create and delete Tag objects",
+        key: "Tag::owner",
     },
     PermissionInfo {
         name: "Read Organizations",

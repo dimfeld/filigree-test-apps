@@ -31,10 +31,12 @@ use crate::{
             PostImage, PostImageCreatePayload, PostImageCreateResult, PostImageId,
             PostImageUpdatePayload,
         },
+        post_tag::{PostTag, PostTagCreatePayload, PostTagUpdatePayload},
         reaction::{
             Reaction, ReactionCreatePayload, ReactionCreateResult, ReactionId,
             ReactionUpdatePayload,
         },
+        tag::{Tag, TagCreatePayload, TagCreateResult, TagId, TagUpdatePayload},
     },
     server::ServerState,
     Error,
@@ -176,7 +178,7 @@ async fn update_child_comment(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::comment::Comment::update_one_with_parent(
+    let result = crate::models::comment::Comment::update_one_with_parent_post(
         &state.db, &auth, &parent_id, &child_id, payload,
     )
     .await?;
@@ -189,7 +191,7 @@ async fn delete_child_comment(
     auth: Authed,
     Path((parent_id, child_id)): Path<(PostId, CommentId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let deleted = crate::models::comment::Comment::delete_with_parent(
+    let deleted = crate::models::comment::Comment::delete_with_parent_post(
         &state.db, &auth, &parent_id, &child_id,
     )
     .await?;
@@ -259,7 +261,7 @@ async fn update_child_reaction(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::reaction::Reaction::update_one_with_parent(
+    let result = crate::models::reaction::Reaction::update_one_with_parent_post(
         &state.db, &auth, &parent_id, &child_id, payload,
     )
     .await?;
@@ -272,7 +274,7 @@ async fn delete_child_reaction(
     auth: Authed,
     Path((parent_id, child_id)): Path<(PostId, ReactionId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let deleted = crate::models::reaction::Reaction::delete_with_parent(
+    let deleted = crate::models::reaction::Reaction::delete_with_parent_post(
         &state.db, &auth, &parent_id, &child_id,
     )
     .await?;
@@ -313,7 +315,7 @@ async fn upsert_child_poll(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::poll::Poll::upsert_with_parent(
+    let result = crate::models::poll::Poll::upsert_with_parent_post(
         &state.db,
         &auth.organization_id,
         &parent_id,
@@ -335,7 +337,7 @@ async fn delete_child_poll(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let deleted = crate::models::poll::Poll::delete_all_children_of_parent(
+    let deleted = crate::models::poll::Poll::delete_all_children_of_post(
         &state.db,
         &auth.organization_id,
         &parent_id,
@@ -348,6 +350,8 @@ async fn delete_child_poll(
         Ok(StatusCode::NOT_FOUND)
     }
 }
+
+// TODO updateendpoints for adding and removing the through model
 
 async fn list_child_post_image(
     State(state): State<ServerState>,
@@ -528,6 +532,7 @@ pub fn create_routes() -> axum::Router<ServerState> {
             routing::delete(delete_child_poll)
                 .route_layer(has_any_permission(vec![CREATE_PERMISSION, "org_admin"])),
         )
+        // TODO update endpoints for adding and removing the through model
         .route(
             "/posts/:id/post_images",
             routing::get(list_child_post_image)
@@ -650,6 +655,11 @@ mod test {
             let ids = serde_json::json!(null);
 
             assert_eq!(result["poll_id"], ids, "field poll_id");
+
+            let ids = &added.tag;
+            let ids = serde_json::to_value(ids).unwrap();
+
+            assert_eq!(result["tag_id"], ids, "field tag_id");
         }
 
         let response = no_roles_user.client.get("posts").send().await.unwrap();
@@ -744,6 +754,12 @@ mod test {
         );
 
         assert_eq!(result["poll"], serde_json::json!(null), "field poll");
+
+        assert_eq!(
+            result["tag"],
+            serde_json::to_value(&added.tag).unwrap(),
+            "field tag"
+        );
 
         assert_eq!(result["images"], serde_json::json!([]), "field images");
 
@@ -964,6 +980,7 @@ mod test {
     }
 
     #[sqlx::test]
+
     async fn child_comment(pool: sqlx::PgPool) {
         // Create a test object
         let (
@@ -1212,6 +1229,7 @@ mod test {
     }
 
     #[sqlx::test]
+
     async fn child_reaction(pool: sqlx::PgPool) {
         // Create a test object
         let (
@@ -1460,6 +1478,7 @@ mod test {
     }
 
     #[sqlx::test]
+
     async fn child_poll(pool: sqlx::PgPool) {
         // Create a test object
         let (
@@ -1656,6 +1675,210 @@ mod test {
         let res = admin_user
             .client
             .get(&format!("posts/{}/poll", parent_result.id))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::NOT_FOUND);
+    }
+
+    #[sqlx::test]
+    #[ignore = "through child object tests not implemented yet"]
+    async fn child_tag(pool: sqlx::PgPool) {
+        // Create a test object
+        let (
+            _app,
+            BootstrappedData {
+                organization,
+                admin_user,
+                no_roles_user,
+                ..
+            },
+        ) = start_app(pool.clone()).await;
+
+        let (parent_payload, parent_result) = setup_test_objects(&pool, organization.id, 2)
+            .await
+            .into_iter()
+            .next()
+            .unwrap();
+
+        // Create a test object
+        let payload_one = crate::models::tag::testing::make_create_payload(1);
+        let create_result_one = admin_user
+            .client
+            .post(&format!("posts/{}/tag", parent_result.id))
+            .json(&payload_one)
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        let id_one = TagId::from_str(create_result_one["id"].as_str().unwrap()).unwrap();
+
+        // Try to create a test object with a bad parent id
+        let bad_parent_id = PostId::new();
+        let payload_two = crate::models::tag::testing::make_create_payload(1);
+        let response = admin_user
+            .client
+            .post(&format!("posts/{}/tag", bad_parent_id))
+            .json(&payload_two)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+
+        // Check create without permissions
+        let bad_create_payload = crate::models::tag::testing::make_create_payload(9);
+        let res = no_roles_user
+            .client
+            .post(&format!("posts/{}/tag", parent_result.id))
+            .json(&bad_create_payload)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Check get without permissions
+        let res = no_roles_user
+            .client
+            .get(&format!("posts/{}/tag", parent_result.id))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Check update without permissions
+        let bad_update_payload = crate::models::tag::testing::make_update_payload(8);
+        let res = no_roles_user
+            .client
+            .put(&format!("posts/{}/tag", parent_result.id))
+            .json(&bad_update_payload)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Check delete without permissions
+        let res = no_roles_user
+            .client
+            .delete(&format!("posts/{}/tag", parent_result.id))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Check get of test object
+        let get_result_one = admin_user
+            .client
+            .get(&format!("posts/{}/tag", parent_result.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(create_result_one, get_result_one);
+
+        // Check get of test object with a different parent ID
+        let get_result_bad_parent = admin_user
+            .client
+            .get(&format!("posts/{}/tag", bad_parent_id))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            get_result_bad_parent.status(),
+            reqwest::StatusCode::NOT_FOUND
+        );
+
+        // Check update of test object
+        let update_payload_one = crate::models::tag::testing::make_update_payload(5);
+        let update_result_one = admin_user
+            .client
+            .put(&format!("posts/{}/tag", parent_result.id))
+            .json(&update_payload_one)
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+
+        // Check update of test object with a different parent ID
+        let bad_update_payload = crate::models::tag::testing::make_update_payload(5);
+        let bad_update_response = admin_user
+            .client
+            .put(&format!("posts/{}/tag", parent_result.id))
+            .json(&bad_update_payload)
+            .send()
+            .await
+            .unwrap();
+        // TODO this is broken right now
+        // assert_eq!(bad_update_response.status(), reqwest::StatusCode::NOT_FOUND);
+
+        // Check that the data reflects the first update
+        let updated_get_result_one = admin_user
+            .client
+            .get(&format!("posts/{}/tag", parent_result.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        // TODO generate comparison for updated_get_result_one and update_payload_one
+
+        // Check delete of test object with a different parent ID
+        let delete_result = admin_user
+            .client
+            .delete(&format!("posts/{}/tag", bad_parent_id))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(delete_result.status(), reqwest::StatusCode::NOT_FOUND);
+
+        // Check list of test object
+        let list_result = admin_user
+            .client
+            .get(&format!("posts/{}/tag", parent_result.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<Tag>()
+            .await
+            .unwrap();
+
+        assert!(list_result.id == id_one);
+
+        // Check delete of test object
+        admin_user
+            .client
+            .delete(&format!("posts/{}/tag", parent_result.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap();
+
+        let res = admin_user
+            .client
+            .get(&format!("posts/{}/tag", parent_result.id))
             .send()
             .await
             .unwrap();

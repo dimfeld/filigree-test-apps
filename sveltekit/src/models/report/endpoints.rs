@@ -22,9 +22,13 @@ use super::{
 };
 use crate::{
     auth::{has_any_permission, Authed},
-    models::report_section::{
-        ReportSection, ReportSectionCreatePayload, ReportSectionCreateResult, ReportSectionId,
-        ReportSectionUpdatePayload,
+    models::{
+        report_section::{
+            ReportSection, ReportSectionCreatePayload, ReportSectionCreateResult, ReportSectionId,
+            ReportSectionUpdatePayload,
+        },
+        report_tag::{ReportTag, ReportTagCreatePayload, ReportTagUpdatePayload},
+        tag::{Tag, TagCreatePayload, TagCreateResult, TagId, TagUpdatePayload},
     },
     server::ServerState,
     Error,
@@ -159,7 +163,7 @@ async fn update_child_report_section(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::report_section::ReportSection::update_one_with_parent(
+    let result = crate::models::report_section::ReportSection::update_one_with_parent_report(
         &state.db, &auth, &parent_id, &child_id, payload,
     )
     .await?;
@@ -172,7 +176,7 @@ async fn delete_child_report_section(
     auth: Authed,
     Path((parent_id, child_id)): Path<(ReportId, ReportSectionId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let deleted = crate::models::report_section::ReportSection::delete_with_parent(
+    let deleted = crate::models::report_section::ReportSection::delete_with_parent_report(
         &state.db, &auth, &parent_id, &child_id,
     )
     .await?;
@@ -183,6 +187,8 @@ async fn delete_child_report_section(
         Ok(StatusCode::NOT_FOUND)
     }
 }
+
+// TODO updateendpoints for adding and removing the through model
 
 pub fn create_routes() -> axum::Router<ServerState> {
     axum::Router::new()
@@ -240,6 +246,8 @@ pub fn create_routes() -> axum::Router<ServerState> {
             routing::delete(delete_child_report_section)
                 .route_layer(has_any_permission(vec![CREATE_PERMISSION, "org_admin"])),
         )
+
+    // TODO update endpoints for adding and removing the through model
 }
 
 #[cfg(test)]
@@ -340,12 +348,17 @@ mod test {
                 .iter()
                 .map(|o| o.id)
                 .collect::<Vec<_>>();
-
             let ids = serde_json::to_value(&ids).unwrap();
+
             assert_eq!(
                 result["report_section_ids"], ids,
                 "field report_section_ids"
             );
+
+            let ids = &added.tags;
+            let ids = serde_json::to_value(ids).unwrap();
+
+            assert_eq!(result["tag_ids"], ids, "field tag_ids");
         }
 
         let response = no_roles_user.client.get("reports").send().await.unwrap();
@@ -433,6 +446,12 @@ mod test {
             result["report_sections"],
             serde_json::to_value(&added.report_sections).unwrap(),
             "field report_sections"
+        );
+
+        assert_eq!(
+            result["tags"],
+            serde_json::to_value(&added.tags).unwrap(),
+            "field tags"
         );
 
         let result = user
@@ -662,6 +681,7 @@ mod test {
     }
 
     #[sqlx::test]
+
     async fn child_report_section(pool: sqlx::PgPool) {
         // Create a test object
         let (
@@ -918,6 +938,255 @@ mod test {
                 "reports/{}/report_sections/{}",
                 parent_result.id, id_one
             ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::NOT_FOUND);
+    }
+
+    #[sqlx::test]
+    #[ignore = "through child object tests not implemented yet"]
+    async fn child_tag(pool: sqlx::PgPool) {
+        // Create a test object
+        let (
+            _app,
+            BootstrappedData {
+                organization,
+                admin_user,
+                no_roles_user,
+                ..
+            },
+        ) = start_app(pool.clone()).await;
+
+        let (parent_payload, parent_result) = setup_test_objects(&pool, organization.id, 2)
+            .await
+            .into_iter()
+            .next()
+            .unwrap();
+
+        // Create a test object
+        let payload_one = crate::models::tag::testing::make_create_payload(1);
+        let create_result_one = admin_user
+            .client
+            .post(&format!("reports/{}/tags", parent_result.id))
+            .json(&payload_one)
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        let id_one = TagId::from_str(create_result_one["id"].as_str().unwrap()).unwrap();
+
+        // Try to create a test object with a bad parent id
+        let bad_parent_id = ReportId::new();
+        let payload_two = crate::models::tag::testing::make_create_payload(1);
+        let response = admin_user
+            .client
+            .post(&format!("reports/{}/tags", bad_parent_id))
+            .json(&payload_two)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+
+        // Create another test object
+        let payload_two = crate::models::tag::testing::make_create_payload(2);
+        let create_result_two = admin_user
+            .client
+            .post(&format!("reports/{}/tags", parent_result.id))
+            .json(&payload_two)
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        let id_two = TagId::from_str(create_result_two["id"].as_str().unwrap()).unwrap();
+
+        // Check create without permissions
+        let bad_create_payload = crate::models::tag::testing::make_create_payload(9);
+        let res = no_roles_user
+            .client
+            .post(&format!("reports/{}/tags", parent_result.id))
+            .json(&bad_create_payload)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Check get without permissions
+        let res = no_roles_user
+            .client
+            .get(&format!("reports/{}/tags/{}", parent_result.id, id_one))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Check update without permissions
+        let bad_update_payload = crate::models::tag::testing::make_update_payload(8);
+        let res = no_roles_user
+            .client
+            .put(&format!("reports/{}/tags/{}", parent_result.id, id_one))
+            .json(&bad_update_payload)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Check delete without permissions
+        let res = no_roles_user
+            .client
+            .delete(&format!("reports/{}/tags/{}", parent_result.id, id_one))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Check get of test object
+        let get_result_one = admin_user
+            .client
+            .get(&format!(
+                "reports/{}/tags/{}",
+                parent_result.id,
+                create_result_one["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(create_result_one, get_result_one);
+
+        // Check get of test object with a different parent ID
+        let get_result_bad_parent = admin_user
+            .client
+            .get(&format!(
+                "reports/{}/tags/{}",
+                bad_parent_id,
+                create_result_one["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            get_result_bad_parent.status(),
+            reqwest::StatusCode::NOT_FOUND
+        );
+
+        // Check update of test object
+        let update_payload_one = crate::models::tag::testing::make_update_payload(5);
+        let update_result_one = admin_user
+            .client
+            .put(&format!(
+                "reports/{}/tags/{}",
+                parent_result.id,
+                create_result_one["id"].as_str().unwrap()
+            ))
+            .json(&update_payload_one)
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+
+        // Check update of test object with a different parent ID
+        let bad_update_payload = crate::models::tag::testing::make_update_payload(5);
+        let bad_update_response = admin_user
+            .client
+            .put(&format!(
+                "reports/{}/tags/{}",
+                parent_result.id,
+                create_result_one["id"].as_str().unwrap()
+            ))
+            .json(&bad_update_payload)
+            .send()
+            .await
+            .unwrap();
+        // TODO this is broken right now
+        // assert_eq!(bad_update_response.status(), reqwest::StatusCode::NOT_FOUND);
+
+        // Check that the data reflects the first update
+        let updated_get_result_one = admin_user
+            .client
+            .get(&format!(
+                "reports/{}/tags/{}",
+                parent_result.id,
+                create_result_one["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        // TODO generate comparison for updated_get_result_one and update_payload_one
+
+        // Check delete of test object with a different parent ID
+        let delete_result = admin_user
+            .client
+            .delete(&format!(
+                "reports/{}/tags/{}",
+                bad_parent_id,
+                create_result_one["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(delete_result.status(), reqwest::StatusCode::NOT_FOUND);
+
+        // Check list of test object
+        let list_result = admin_user
+            .client
+            .get(&format!("reports/{}/tags", parent_result.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<Vec<Tag>>()
+            .await
+            .unwrap();
+
+        assert!(list_result[0].id == id_one || list_result[0].id == id_two);
+        assert!(list_result[1].id == id_one || list_result[1].id == id_two);
+        // Just make sure that we didn't get the same object twice
+        assert_ne!(list_result[0].id, list_result[1].id);
+        assert_eq!(list_result.len(), 2);
+
+        // Check delete of test object
+        admin_user
+            .client
+            .delete(&format!("reports/{}/tags/{}", parent_result.id, id_one))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap();
+
+        let res = admin_user
+            .client
+            .get(&format!("reports/{}/tags/{}", parent_result.id, id_one))
             .send()
             .await
             .unwrap();

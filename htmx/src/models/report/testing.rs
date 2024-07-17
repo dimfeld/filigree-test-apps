@@ -11,6 +11,7 @@ use crate::models::report_section::{
 pub fn make_create_payload(i: usize) -> ReportCreatePayload {
     ReportCreatePayload {
         id: None,
+
         title: format!("Test object {i}"),
         description: (i > 1).then(|| format!("Test object {i}")),
         ui: serde_json::json!({ "key": i }),
@@ -34,6 +35,7 @@ pub fn make_create_payload(i: usize) -> ReportCreatePayload {
 pub fn make_update_payload(i: usize) -> ReportUpdatePayload {
     ReportUpdatePayload {
         id: None,
+
         title: format!("Test object {i}"),
         description: Some(format!("Test object {i}")),
         ui: serde_json::json!({ "key": i }),

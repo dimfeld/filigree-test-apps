@@ -1,11 +1,11 @@
 UPDATE
   myapp.report_sections
 SET
-  name = $2,
-  viz = $3,
-  options = $4,
-  report_id = $5,
+  name = $1,
+  viz = $2,
+  options = $3,
+  report_id = $4,
   updated_at = NOW()
 WHERE
-  id = $1
+  id = $5
   AND organization_id = $6

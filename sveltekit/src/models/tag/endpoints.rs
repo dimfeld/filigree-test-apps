@@ -1,0 +1,518 @@
+#![allow(unused_imports, unused_variables, dead_code)]
+use std::{borrow::Cow, str::FromStr};
+
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+    routing,
+};
+use axum_extra::extract::Query;
+use axum_jsonschema::Json;
+use error_stack::ResultExt;
+use filigree::{
+    auth::{AuthError, ObjectPermission},
+    extract::FormOrJson,
+};
+use tracing::{event, Level};
+
+use super::{
+    queries, types::*, TagId, CREATE_PERMISSION, OWNER_PERMISSION, READ_PERMISSION,
+    WRITE_PERMISSION,
+};
+use crate::{
+    auth::{has_any_permission, Authed},
+    server::ServerState,
+    Error,
+};
+
+async fn get(
+    State(state): State<ServerState>,
+    auth: Authed,
+    Path(id): Path<TagId>,
+) -> Result<impl IntoResponse, Error> {
+    let object = Tag::get(&state.db, &auth, &id).await?;
+
+    Ok(Json(object))
+}
+
+async fn list(
+    State(state): State<ServerState>,
+    auth: Authed,
+    Query(qs): Query<queries::ListQueryFilters>,
+) -> Result<impl IntoResponse, Error> {
+    let results = Tag::list(&state.db, &auth, &qs).await?;
+
+    Ok(Json(results))
+}
+
+async fn create(
+    State(state): State<ServerState>,
+    auth: Authed,
+    FormOrJson(payload): FormOrJson<TagCreatePayload>,
+) -> Result<impl IntoResponse, Error> {
+    let mut tx = state.db.begin().await.change_context(Error::Db)?;
+    let result = Tag::create(&mut *tx, &auth, payload).await?;
+    tx.commit().await.change_context(Error::Db)?;
+
+    Ok((StatusCode::CREATED, Json(result)))
+}
+
+async fn update(
+    State(state): State<ServerState>,
+    auth: Authed,
+    Path(id): Path<TagId>,
+    FormOrJson(payload): FormOrJson<TagUpdatePayload>,
+) -> Result<impl IntoResponse, Error> {
+    let mut tx = state.db.begin().await.change_context(Error::Db)?;
+
+    let result = Tag::update(&mut *tx, &auth, &id, payload).await?;
+
+    tx.commit().await.change_context(Error::Db)?;
+
+    if result {
+        Ok(StatusCode::OK)
+    } else {
+        Ok(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn delete(
+    State(state): State<ServerState>,
+    auth: Authed,
+    Path(id): Path<TagId>,
+) -> Result<impl IntoResponse, Error> {
+    let mut tx = state.db.begin().await.change_context(Error::Db)?;
+
+    let deleted = Tag::delete(&mut *tx, &auth, &id).await?;
+
+    if !deleted {
+        return Ok(StatusCode::NOT_FOUND);
+    }
+
+    tx.commit().await.change_context(Error::Db)?;
+
+    Ok(StatusCode::OK)
+}
+
+pub fn create_routes() -> axum::Router<ServerState> {
+    axum::Router::new()
+        .route(
+            "/tags",
+            routing::get(list).route_layer(has_any_permission(vec![READ_PERMISSION, "org_admin"])),
+        )
+        .route(
+            "/tags/:id",
+            routing::get(get).route_layer(has_any_permission(vec![READ_PERMISSION, "org_admin"])),
+        )
+        .route(
+            "/tags",
+            routing::post(create)
+                .route_layer(has_any_permission(vec![CREATE_PERMISSION, "org_admin"])),
+        )
+        .route(
+            "/tags/:id",
+            routing::put(update).route_layer(has_any_permission(vec![
+                WRITE_PERMISSION,
+                OWNER_PERMISSION,
+                "org_admin",
+            ])),
+        )
+        .route(
+            "/tags/:id",
+            routing::delete(delete)
+                .route_layer(has_any_permission(vec![CREATE_PERMISSION, "org_admin"])),
+        )
+}
+
+#[cfg(test)]
+mod test {
+    use filigree::testing::ResponseExt;
+    use futures::{StreamExt, TryStreamExt};
+    use tracing::{event, Level};
+
+    use super::{
+        super::testing::{make_create_payload, make_update_payload},
+        *,
+    };
+    use crate::{
+        models::organization::OrganizationId,
+        tests::{start_app, BootstrappedData},
+    };
+
+    async fn setup_test_objects(
+        db: &sqlx::PgPool,
+        organization_id: OrganizationId,
+        count: usize,
+    ) -> Vec<(TagCreatePayload, TagCreateResult)> {
+        let mut tx = db.begin().await.unwrap();
+        let mut objects = Vec::with_capacity(count);
+        for i in 0..count {
+            let id = TagId::new();
+            event!(Level::INFO, %id, "Creating test object {}", i);
+            let payload = make_create_payload(i);
+            let result = Tag::create_raw(&mut *tx, &id, &organization_id, payload.clone())
+                .await
+                .expect("Creating test object failed");
+
+            objects.push((payload, result));
+        }
+
+        tx.commit().await.unwrap();
+        objects
+    }
+
+    #[sqlx::test]
+    async fn list_objects(pool: sqlx::PgPool) {
+        let (
+            _app,
+            BootstrappedData {
+                organization,
+                admin_user,
+                no_roles_user,
+                user,
+                ..
+            },
+        ) = start_app(pool.clone()).await;
+
+        let added_objects = setup_test_objects(&pool, organization.id, 3).await;
+
+        let results = admin_user
+            .client
+            .get("tags")
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<Vec<serde_json::Value>>()
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), added_objects.len());
+
+        for result in results {
+            let (payload, added) = added_objects
+                .iter()
+                .find(|i| i.1.id.to_string() == result["id"].as_str().unwrap())
+                .expect("Returned object did not match any of the added objects");
+        }
+
+        let results = user
+            .client
+            .get("tags")
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<Vec<serde_json::Value>>()
+            .await
+            .unwrap();
+
+        for result in results {
+            let (payload, added) = added_objects
+                .iter()
+                .find(|i| i.1.id.to_string() == result["id"].as_str().unwrap())
+                .expect("Returned object did not match any of the added objects");
+        }
+
+        let response = no_roles_user.client.get("tags").send().await.unwrap();
+
+        assert_eq!(response.status(), reqwest::StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test]
+    async fn list_fetch_specific_ids(pool: sqlx::PgPool) {
+        let (
+            _app,
+            BootstrappedData {
+                organization, user, ..
+            },
+        ) = start_app(pool.clone()).await;
+
+        let added_objects = setup_test_objects(&pool, organization.id, 3).await;
+
+        let results = user
+            .client
+            .get("tags")
+            .query(&[("id", added_objects[0].1.id), ("id", added_objects[2].1.id)])
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<Vec<serde_json::Value>>()
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert!(results
+            .iter()
+            .any(|o| o["id"] == added_objects[0].1.id.to_string()));
+        assert!(results
+            .iter()
+            .any(|o| o["id"] == added_objects[2].1.id.to_string()));
+    }
+
+    #[sqlx::test]
+    #[ignore = "todo"]
+    async fn list_order_by(_pool: sqlx::PgPool) {}
+
+    #[sqlx::test]
+    #[ignore = "todo"]
+    async fn list_paginated(_pool: sqlx::PgPool) {}
+
+    #[sqlx::test]
+    #[ignore = "todo"]
+    async fn list_filters(_pool: sqlx::PgPool) {}
+
+    #[sqlx::test]
+    async fn get_object(pool: sqlx::PgPool) {
+        let (
+            _app,
+            BootstrappedData {
+                organization,
+                admin_user,
+                user,
+                no_roles_user,
+                ..
+            },
+        ) = start_app(pool.clone()).await;
+
+        let added_objects = setup_test_objects(&pool, organization.id, 2).await;
+
+        let result = admin_user
+            .client
+            .get(&format!("tags/{}", added_objects[1].1.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+
+        let (payload, added) = &added_objects[1];
+
+        let result = user
+            .client
+            .get(&format!("tags/{}", added_objects[1].1.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+
+        let (payload, added) = &added_objects[1];
+
+        let response = no_roles_user
+            .client
+            .get(&format!("tags/{}", added_objects[1].1.id))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), reqwest::StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test]
+    async fn update_object(pool: sqlx::PgPool) {
+        let (
+            _app,
+            BootstrappedData {
+                organization,
+                admin_user,
+                no_roles_user,
+                ..
+            },
+        ) = start_app(pool.clone()).await;
+
+        let added_objects = setup_test_objects(&pool, organization.id, 2).await;
+
+        let update_payload = make_update_payload(20);
+        admin_user
+            .client
+            .put(&format!("tags/{}", added_objects[1].1.id))
+            .json(&update_payload)
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap();
+
+        let updated: serde_json::Value = admin_user
+            .client
+            .get(&format!("tags/{}", added_objects[1].1.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        assert_eq!(
+            updated["name"],
+            serde_json::to_value(&update_payload.name).unwrap(),
+            "field name"
+        );
+        assert_eq!(
+            updated["color"],
+            serde_json::to_value(&update_payload.color).unwrap(),
+            "field color"
+        );
+
+        // TODO Test that owner can not write fields which are not writable by anyone.
+        // TODO Test that user can not update fields which are writable by owner but not user
+
+        // Make sure that no other objects were updated
+        let non_updated: serde_json::Value = admin_user
+            .client
+            .get(&format!("tags/{}", added_objects[0].1.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        let response = no_roles_user
+            .client
+            .put(&format!("tags/{}", added_objects[1].1.id))
+            .json(&update_payload)
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), reqwest::StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test]
+    async fn create_object(pool: sqlx::PgPool) {
+        let (
+            _app,
+            BootstrappedData {
+                admin_user,
+                no_roles_user,
+                ..
+            },
+        ) = start_app(pool.clone()).await;
+
+        let create_payload = make_create_payload(10);
+        let created_result: serde_json::Value = admin_user
+            .client
+            .post("tags")
+            .json(&create_payload)
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        assert_eq!(
+            created_result["name"],
+            serde_json::to_value(&create_payload.name).unwrap(),
+            "field name from create response"
+        );
+        assert_eq!(
+            created_result["color"],
+            serde_json::to_value(&create_payload.color).unwrap(),
+            "field color from create response"
+        );
+
+        let created_id = created_result["id"].as_str().unwrap();
+        let get_result = admin_user
+            .client
+            .get(&format!("tags/{}", created_id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+
+        let response = no_roles_user
+            .client
+            .post("tags")
+            .json(&create_payload)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test]
+    async fn delete_object(pool: sqlx::PgPool) {
+        let (
+            _app,
+            BootstrappedData {
+                organization,
+                admin_user,
+                no_roles_user,
+                ..
+            },
+        ) = start_app(pool.clone()).await;
+
+        let added_objects = setup_test_objects(&pool, organization.id, 2).await;
+
+        admin_user
+            .client
+            .delete(&format!("tags/{}", added_objects[1].1.id))
+            .send()
+            .await
+            .unwrap()
+            .log_error()
+            .await
+            .unwrap();
+
+        let response = admin_user
+            .client
+            .get(&format!("tags/{}", added_objects[1].1.id))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+
+        // Delete should not happen without permissions
+        let response = no_roles_user
+            .client
+            .delete(&format!("tags/{}", added_objects[0].1.id))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Make sure other objects still exist
+        let response = admin_user
+            .client
+            .get(&format!("tags/{}", added_objects[0].1.id))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+    }
+}

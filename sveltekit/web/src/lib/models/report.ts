@@ -6,6 +6,11 @@ import {
 	ReportSectionSchema,
 	ReportSectionUpdatePayloadSchema,
 } from "./report_section.js";
+import {
+	TagCreatePayloadSchema,
+	TagSchema,
+	TagUpdatePayloadSchema,
+} from "./tag.js";
 
 export type ReportId = string;
 
@@ -29,11 +34,26 @@ export const ReportCreatePayloadSchema = z.object({
 	description: z.string().optional(),
 	ui: z.any(),
 	report_sections: ReportSectionCreatePayloadSchema.array().optional(),
+	tags: z.string().array().optional(),
 });
 
 export type ReportCreatePayload = z.infer<typeof ReportCreatePayloadSchema>;
 
-export const ReportPopulatedGetResultAndCreateResultSchema = z.object({
+export const ReportCreateResultSchema = z.object({
+	id: z.string(),
+	organization_id: z.string(),
+	updated_at: z.string().datetime(),
+	created_at: z.string().datetime(),
+	title: z.string(),
+	description: z.string().optional(),
+	ui: z.any(),
+	report_sections: ReportSectionCreatePayloadSchema.array(),
+	tags: z.string().array(),
+});
+
+export type ReportCreateResult = z.infer<typeof ReportCreateResultSchema>;
+
+export const ReportPopulatedGetResultSchema = z.object({
 	id: z.string(),
 	organization_id: z.string(),
 	updated_at: z.string().datetime(),
@@ -42,17 +62,12 @@ export const ReportPopulatedGetResultAndCreateResultSchema = z.object({
 	description: z.string().optional(),
 	ui: z.any(),
 	report_sections: ReportSectionSchema.array(),
+	tags: TagSchema.array(),
 });
 
-export type ReportPopulatedGetResultAndCreateResult = z.infer<
-	typeof ReportPopulatedGetResultAndCreateResultSchema
+export type ReportPopulatedGetResult = z.infer<
+	typeof ReportPopulatedGetResultSchema
 >;
-export const ReportPopulatedGetResultSchema =
-	ReportPopulatedGetResultAndCreateResultSchema;
-export type ReportPopulatedGetResult = ReportPopulatedGetResultAndCreateResult;
-export const ReportCreateResultSchema =
-	ReportPopulatedGetResultAndCreateResultSchema;
-export type ReportCreateResult = ReportPopulatedGetResultAndCreateResult;
 
 export const ReportPopulatedListResultSchema = z.object({
 	id: z.string(),
@@ -63,6 +78,7 @@ export const ReportPopulatedListResultSchema = z.object({
 	description: z.string().optional(),
 	ui: z.any(),
 	report_section_ids: z.string().array(),
+	tag_ids: z.string().array(),
 });
 
 export type ReportPopulatedListResult = z.infer<
@@ -75,6 +91,7 @@ export const ReportUpdatePayloadSchema = z.object({
 	description: z.string().optional(),
 	ui: z.any(),
 	report_sections: ReportSectionUpdatePayloadSchema.array().optional(),
+	tags: z.string().array().optional(),
 });
 
 export type ReportUpdatePayload = z.infer<typeof ReportUpdatePayloadSchema>;

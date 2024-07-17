@@ -9,4 +9,4 @@ SELECT
 FROM
   myapp.organizations tb
 WHERE
-  tb.id = $1
+  id = $1

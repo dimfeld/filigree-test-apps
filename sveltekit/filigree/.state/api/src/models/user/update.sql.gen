@@ -1,10 +1,10 @@
 UPDATE
   public.users
 SET
-  name = $2,
-  email = $3,
-  avatar_url = $4,
+  name = $1,
+  email = $2,
+  avatar_url = $3,
   updated_at = NOW()
 WHERE
-  id = $1
+  id = $4
   AND organization_id = $5

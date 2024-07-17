@@ -7,46 +7,47 @@ SELECT
   body,
   (
     SELECT
-      COALESCE(ARRAY_AGG(comments.id), ARRAY[]::uuid[])
+      COALESCE(ARRAY_AGG(ct.id), ARRAY[]::uuid[])
     FROM
-      myapp.comments
+      myapp.comments ct
     WHERE
-      post_id = $1
+      ct.post_id = $1
       AND organization_id = $2) AS "comment_ids!: Vec<CommentId>",
   (
     SELECT
-      COALESCE(ARRAY_AGG(JSONB_BUILD_OBJECT('id', id, 'organization_id', organization_id,
-	'updated_at', updated_at, 'created_at', created_at, 'typ', type,
-	'post_id', post_id)), ARRAY[]::jsonb[])
+      COALESCE(ARRAY_AGG(JSONB_BUILD_OBJECT('id', t.id, 'organization_id',
+	t.organization_id, 'updated_at', t.updated_at, 'created_at', t.created_at,
+	'typ', t.type, 'post_id', t.post_id)), ARRAY[]::jsonb[])
     FROM
-      myapp.reactions
+      myapp.reactions t
     WHERE
       post_id = $1
-      AND organization_id = $2) AS "reactions!: Vec<Reaction>",
+      AND t.organization_id = $2) AS "reactions!: Vec<Reaction>",
   (
     SELECT
-      JSONB_BUILD_OBJECT('id', id, 'organization_id', organization_id, 'updated_at',
-	updated_at, 'created_at', created_at, 'question', question, 'answers',
-	answers, 'post_id', post_id)
+      JSONB_BUILD_OBJECT('id', t.id, 'organization_id', t.organization_id, 'updated_at',
+	t.updated_at, 'created_at', t.created_at, 'question', t.question, 'answers',
+	t.answers, 'post_id', t.post_id)
     FROM
-      myapp.polls
+      myapp.polls t
     WHERE
       post_id = $1
-      AND organization_id = $2
+      AND t.organization_id = $2
     LIMIT 1) AS "poll: Poll",
 (
   SELECT
-    COALESCE(ARRAY_AGG(JSONB_BUILD_OBJECT('id', id, 'organization_id', organization_id,
-      'updated_at', updated_at, 'created_at', created_at, 'file_storage_key', file_storage_key,
-      'file_storage_bucket', file_storage_bucket, 'file_original_name', file_original_name, 'file_size',
-      file_size, 'file_hash', file_hash, 'post_id', post_id)), ARRAY[]::jsonb[])
+    COALESCE(ARRAY_AGG(JSONB_BUILD_OBJECT('id', t.id, 'organization_id',
+      t.organization_id, 'updated_at', t.updated_at, 'created_at', t.created_at,
+      'file_storage_key', t.file_storage_key, 'file_storage_bucket', t.file_storage_bucket, 'file_original_name',
+      t.file_original_name, 'file_size', t.file_size, 'file_hash', t.file_hash,
+      'post_id', t.post_id)), ARRAY[]::jsonb[])
   FROM
-    myapp.post_images
+    myapp.post_images t
   WHERE
     post_id = $1
-    AND organization_id = $2) AS "images!: Vec<PostImage>"
+    AND t.organization_id = $2) AS "images!: Vec<PostImage>"
 FROM
   myapp.posts tb
 WHERE
-  tb.id = $1
+  id = $1
   AND tb.organization_id = $2

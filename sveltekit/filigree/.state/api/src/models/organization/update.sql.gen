@@ -1,9 +1,9 @@
 UPDATE
   public.organizations
 SET
-  name = $2,
-  OWNER = $3,
-  default_role = $4,
+  name = $1,
+  OWNER = $2,
+  default_role = $3,
   updated_at = NOW()
 WHERE
-  id = $1
+  id = $4

@@ -164,8 +164,9 @@ impl Poll {
     ) -> Result<T, error_stack::Report<Error>> {
         match result {
             Err(sqlx::Error::Database(e)) if e.constraint() == Some("polls_post_id_fkey") => {
-                Err(e).change_context(Error::NotFound("Parent Post"))
+                Err(e).change_context(Error::NotFound("Parent post_id"))
             }
+
             _ => result.change_context(Error::Db),
         }
     }
@@ -301,10 +302,10 @@ impl Poll {
 
         let result = query_file_scalar!(
             "src/models/poll/update.sql",
-            id.as_uuid(),
             &payload.question as _,
             &payload.answers as _,
             &payload.post_id as _,
+            id.as_uuid(),
             auth.organization_id.as_str()
         )
         .execute(&mut *db)
@@ -367,20 +368,21 @@ impl Poll {
         }
     }
 
-    /// Update or insert the child of the given parent. Since there can only be a single child per
+    /// Update or insert the child of the parent post_id. Since there can only be a single child per
     /// parent, this ignores the `id` field of the payload, and only looks at the parent ID.
 
     #[instrument(skip(db))]
-    pub async fn upsert_with_parent(
+    pub async fn upsert_with_parent_post(
         db: impl PgExecutor<'_>,
         organization_id: &OrganizationId,
         parent_id: &PostId,
         payload: &PollUpdatePayload,
     ) -> Result<Poll, error_stack::Report<Error>> {
-        let id = payload.id.clone().unwrap_or_else(PollId::new);
+        let id = payload.id.clone().unwrap_or_else(|| PollId::new());
+
         let result = query_file_as!(
             Poll,
-            "src/models/poll/upsert_single_child.sql",
+            "src/models/poll/upsert_single_child_of_post.sql",
             id.as_uuid(),
             organization_id.as_str(),
             &payload.question as _,
@@ -395,17 +397,17 @@ impl Poll {
 
     /// Delete a child object, making sure that its parent ID matches.
     #[instrument(skip(db))]
-    pub async fn delete_with_parent(
+    pub async fn delete_with_parent_post(
         db: impl PgExecutor<'_>,
         auth: &AuthInfo,
         parent_id: &PostId,
-        child_id: &PollId,
+        id: &PollId,
     ) -> Result<bool, error_stack::Report<Error>> {
         let result = query_file!(
-            "src/models/poll/delete_with_parent.sql",
+            "src/models/poll/delete_with_parent_post.sql",
             auth.organization_id.as_str(),
             parent_id.as_uuid(),
-            child_id.as_uuid()
+            id.as_uuid()
         )
         .execute(db)
         .await
@@ -415,13 +417,13 @@ impl Poll {
 
     /// Delete all children of the given parent. This function does not do permissions checks.
     #[instrument(skip(db))]
-    pub async fn delete_all_children_of_parent(
+    pub async fn delete_all_children_of_post(
         db: impl PgExecutor<'_>,
         organization_id: &OrganizationId,
         parent_id: &PostId,
     ) -> Result<bool, error_stack::Report<Error>> {
         let result = query_file!(
-            "src/models/poll/delete_all_children.sql",
+            "src/models/poll/delete_all_children_of_post.sql",
             organization_id.as_str(),
             parent_id.as_uuid()
         )

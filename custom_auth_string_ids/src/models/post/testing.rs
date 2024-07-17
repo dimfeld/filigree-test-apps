@@ -20,6 +20,7 @@ use crate::models::{
 pub fn make_create_payload(i: usize) -> PostCreatePayload {
     PostCreatePayload {
         id: None,
+
         subject: format!("Test object {i}"),
         body: format!("Test object {i}"),
     }
@@ -31,6 +32,7 @@ pub fn make_create_payload(i: usize) -> PostCreatePayload {
 pub fn make_update_payload(i: usize) -> PostUpdatePayload {
     PostUpdatePayload {
         id: None,
+
         subject: format!("Test object {i}"),
         body: format!("Test object {i}"),
     }

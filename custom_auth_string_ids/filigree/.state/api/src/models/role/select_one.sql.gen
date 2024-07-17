@@ -8,5 +8,5 @@ SELECT
 FROM
   myapp.roles tb
 WHERE
-  tb.id = $1
+  id = $1
   AND tb.organization_id = $2

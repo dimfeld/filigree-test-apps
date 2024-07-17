@@ -166,8 +166,9 @@ impl ReportSection {
             Err(sqlx::Error::Database(e))
                 if e.constraint() == Some("report_sections_report_id_fkey") =>
             {
-                Err(e).change_context(Error::NotFound("Parent Report"))
+                Err(e).change_context(Error::NotFound("Parent report_id"))
             }
+
             _ => result.change_context(Error::Db),
         }
     }
@@ -304,11 +305,11 @@ impl ReportSection {
 
         let result = query_file_scalar!(
             "src/models/report_section/update.sql",
-            id.as_uuid(),
             &payload.name as _,
             &payload.viz as _,
             &payload.options as _,
             &payload.report_id as _,
+            id.as_uuid(),
             auth.organization_id.as_uuid()
         )
         .execute(&mut *db)
@@ -371,19 +372,20 @@ impl ReportSection {
         }
     }
 
-    /// Update or insert a child of the given parent.
+    /// Update or insert a child of the parent report_id.
 
     #[instrument(skip(db))]
-    pub async fn upsert_with_parent(
+    pub async fn upsert_with_parent_report(
         db: impl PgExecutor<'_>,
         organization_id: &OrganizationId,
         parent_id: &ReportId,
         payload: &ReportSectionUpdatePayload,
     ) -> Result<ReportSection, error_stack::Report<Error>> {
-        let id = payload.id.clone().unwrap_or_else(ReportSectionId::new);
+        let id = payload.id.clone().unwrap_or_else(|| ReportSectionId::new());
+
         let result = query_file_as!(
             ReportSection,
-            "src/models/report_section/upsert_single_child.sql",
+            "src/models/report_section/upsert_single_child_of_report.sql",
             id.as_uuid(),
             organization_id.as_uuid(),
             &payload.name as _,
@@ -399,7 +401,7 @@ impl ReportSection {
 
     /// Update a single child of the given parent. This does nothing if the child doesn't exist.
     #[instrument(skip(db))]
-    pub async fn update_one_with_parent(
+    pub async fn update_one_with_parent_report(
         db: impl PgExecutor<'_>,
         auth: &AuthInfo,
         parent_id: &ReportId,
@@ -409,13 +411,14 @@ impl ReportSection {
         payload.report_id = parent_id.clone();
 
         let actor_ids = auth.actor_ids();
+
         let result = query_file!(
-            "src/models/report_section/update_one_with_parent.sql",
-            id.as_uuid(),
+            "src/models/report_section/update_one_with_parent_report.sql",
             &payload.name as _,
             &payload.viz as _,
             &payload.options as _,
             &payload.report_id as _,
+            id.as_uuid(),
             parent_id.as_uuid(),
             auth.organization_id.as_uuid()
         )
@@ -430,38 +433,40 @@ impl ReportSection {
     /// Insert new values that are not yet in the database and
     /// delete existing values that are not in the payload.
     #[instrument(skip(db))]
-    pub async fn update_all_with_parent(
+    pub async fn update_all_with_parent_report(
         db: &mut PgConnection,
         organization_id: &OrganizationId,
         parent_id: &ReportId,
         payload: &[ReportSectionUpdatePayload],
     ) -> Result<Vec<ReportSection>, error_stack::Report<Error>> {
         if payload.is_empty() {
-            Self::delete_all_children_of_parent(db, organization_id, parent_id).await?;
+            Self::delete_all_children_of_report(db, organization_id, parent_id).await?;
             Ok(Vec::new())
         } else {
             // First, we upsert the existing children.
-            let q = include_str!("upsert_children.sql");
+
+            let q = include_str!("upsert_children_of_report.sql");
             let bindings = ValuesBuilder {
                 first_parameter: 3,
                 num_values: payload.len(),
-                num_columns: 2 + 4,
+                num_columns: 1 + 1 + 4,
             };
             let q = q.replace("__insertion_point_insert_values", &bindings.to_string());
 
-            let mut query = sqlx::query_as::<_, ReportSection>(q.as_str());
-
-            query = query.bind(organization_id).bind(parent_id.as_uuid());
+            let mut query = sqlx::query_as::<_, ReportSection>(q.as_str())
+                .bind(organization_id)
+                .bind(parent_id);
 
             for p in payload {
                 let id = p.id.unwrap_or_else(|| ReportSectionId::new());
+
                 query = query
                     .bind(id)
                     .bind(organization_id)
                     .bind(&p.name)
                     .bind(&p.viz)
                     .bind(&p.options)
-                    .bind(&p.report_id)
+                    .bind(p.report_id.as_uuid())
             }
 
             let results = query.fetch_all(&mut *db).await;
@@ -472,8 +477,9 @@ impl ReportSection {
                 .iter()
                 .map(|o| o.id.as_uuid().clone())
                 .collect::<Vec<_>>();
+
             query_file!(
-                "src/models/report_section/delete_removed_children.sql",
+                "src/models/report_section/delete_removed_children_of_report.sql",
                 organization_id.as_uuid(),
                 parent_id.as_uuid(),
                 &ids
@@ -488,17 +494,17 @@ impl ReportSection {
 
     /// Delete a child object, making sure that its parent ID matches.
     #[instrument(skip(db))]
-    pub async fn delete_with_parent(
+    pub async fn delete_with_parent_report(
         db: impl PgExecutor<'_>,
         auth: &AuthInfo,
         parent_id: &ReportId,
-        child_id: &ReportSectionId,
+        id: &ReportSectionId,
     ) -> Result<bool, error_stack::Report<Error>> {
         let result = query_file!(
-            "src/models/report_section/delete_with_parent.sql",
+            "src/models/report_section/delete_with_parent_report.sql",
             auth.organization_id.as_uuid(),
             parent_id.as_uuid(),
-            child_id.as_uuid()
+            id.as_uuid()
         )
         .execute(db)
         .await
@@ -508,13 +514,13 @@ impl ReportSection {
 
     /// Delete all children of the given parent. This function does not do permissions checks.
     #[instrument(skip(db))]
-    pub async fn delete_all_children_of_parent(
+    pub async fn delete_all_children_of_report(
         db: impl PgExecutor<'_>,
         organization_id: &OrganizationId,
         parent_id: &ReportId,
     ) -> Result<bool, error_stack::Report<Error>> {
         let result = query_file!(
-            "src/models/report_section/delete_all_children.sql",
+            "src/models/report_section/delete_all_children_of_report.sql",
             organization_id.as_uuid(),
             parent_id.as_uuid()
         )

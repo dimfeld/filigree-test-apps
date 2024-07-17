@@ -277,10 +277,10 @@ impl User {
 
         let result = query_file_scalar!(
             "src/models/user/update.sql",
-            id.as_str(),
             &payload.name as _,
             payload.email.as_ref() as _,
             payload.avatar_url.as_ref() as _,
+            id.as_str(),
             auth.organization_id.as_str()
         )
         .execute(&mut *db)

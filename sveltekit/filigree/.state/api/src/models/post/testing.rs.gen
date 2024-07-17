@@ -9,9 +9,11 @@ use crate::models::{
         PostImage, PostImageCreatePayload, PostImageCreateResult, PostImageId,
         PostImageUpdatePayload,
     },
+    post_tag::{PostTag, PostTagCreatePayload, PostTagUpdatePayload},
     reaction::{
         Reaction, ReactionCreatePayload, ReactionCreateResult, ReactionId, ReactionUpdatePayload,
     },
+    tag::{Tag, TagCreatePayload, TagCreateResult, TagId, TagUpdatePayload},
 };
 
 /// Generate a PostCreatePayload for testing.
@@ -20,8 +22,12 @@ use crate::models::{
 pub fn make_create_payload(i: usize) -> PostCreatePayload {
     PostCreatePayload {
         id: None,
+
         subject: format!("Test object {i}"),
         body: format!("Test object {i}"),
+
+        // Testing with through models not implemented yet
+        tag: None,
     }
 }
 
@@ -31,7 +37,11 @@ pub fn make_create_payload(i: usize) -> PostCreatePayload {
 pub fn make_update_payload(i: usize) -> PostUpdatePayload {
     PostUpdatePayload {
         id: None,
+
         subject: format!("Test object {i}"),
         body: format!("Test object {i}"),
+
+        // Testing with through models not implemented yet
+        tag: None,
     }
 }

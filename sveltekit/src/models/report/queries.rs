@@ -22,6 +22,8 @@ use crate::{
             ReportSection, ReportSectionCreatePayload, ReportSectionCreateResult, ReportSectionId,
             ReportSectionUpdatePayload,
         },
+        report_tag::{ReportTag, ReportTagCreatePayload, ReportTagUpdatePayload},
+        tag::{Tag, TagCreatePayload, TagCreateResult, TagId, TagUpdatePayload},
     },
     Error,
 };
@@ -156,6 +158,8 @@ type QueryAs<'q, T> = sqlx::query::QueryAs<
 #[derive(Default)]
 struct ReportCreatePayloadChildrenResult {
     report_sections: Vec<ReportSection>,
+
+    tags: Vec<TagId>,
 }
 
 impl Report {
@@ -321,6 +325,7 @@ impl Report {
             description: result.description,
             ui: result.ui,
             report_sections: child_result.report_sections,
+            tags: child_result.tags,
         };
 
         Ok(result)
@@ -336,10 +341,11 @@ impl Report {
             if !children.is_empty() {
                 for child in children.iter_mut() {
                     child.id = Some(ReportSectionId::new());
+
                     child.report_id = parent_id.clone();
                 }
 
-                ReportSection::update_all_with_parent(
+                ReportSection::update_all_with_parent_report(
                     &mut *db,
                     organization_id,
                     parent_id,
@@ -353,8 +359,30 @@ impl Report {
             vec![]
         };
 
+        let tags_result = if let Some(mut children) = payload.tags {
+            let child_structs = children
+                .into_iter()
+                .map(|child_id| ReportTagCreatePayload {
+                    report_id: Some(parent_id.clone()),
+                    tag_id: Some(child_id),
+                })
+                .collect::<Vec<_>>();
+
+            let result = ReportTag::update_all_with_parent_report(
+                &mut *db,
+                organization_id,
+                parent_id,
+                &child_structs,
+            )
+            .await?;
+            result.into_iter().map(|result| result.tag_id).collect()
+        } else {
+            vec![]
+        };
+
         let result = ReportCreatePayloadChildrenResult {
             report_sections: report_sections_result,
+            tags: tags_result,
         };
 
         Ok(result)
@@ -371,10 +399,10 @@ impl Report {
 
         let result = query_file_scalar!(
             "src/models/report/update.sql",
-            id.as_uuid(),
             &payload.title as _,
             payload.description.as_ref() as _,
             &payload.ui as _,
+            id.as_uuid(),
             auth.organization_id.as_uuid()
         )
         .execute(&mut *db)
@@ -401,8 +429,31 @@ impl Report {
                 child.report_id = parent_id.clone();
             }
 
-            ReportSection::update_all_with_parent(&mut *db, organization_id, parent_id, &children)
-                .await?;
+            ReportSection::update_all_with_parent_report(
+                &mut *db,
+                organization_id,
+                parent_id,
+                &children,
+            )
+            .await?;
+        }
+
+        if let Some(mut children) = payload.tags {
+            let children = children
+                .into_iter()
+                .map(|child_id| ReportTagUpdatePayload {
+                    report_id: Some(parent_id.clone()),
+                    tag_id: Some(child_id),
+                })
+                .collect::<Vec<_>>();
+
+            ReportTag::update_all_with_parent_report(
+                &mut *db,
+                organization_id,
+                parent_id,
+                &children,
+            )
+            .await?;
         }
 
         Ok(())
@@ -480,7 +531,9 @@ impl Report {
         payload: ReportSectionCreatePayload,
     ) -> Result<ReportSectionCreateResult, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
-        let id = payload.id.clone().unwrap_or_else(ReportSectionId::new);
+
+        let id = payload.id.clone().unwrap_or_else(|| ReportSectionId::new());
+
         crate::models::report_section::ReportSection::create_raw(
             db,
             &id,
@@ -498,7 +551,7 @@ impl Report {
     ) -> Result<bool, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.report_id.clone();
-        crate::models::report_section::ReportSection::update_one_with_parent(
+        crate::models::report_section::ReportSection::update_one_with_parent_report(
             db,
             auth,
             &parent_field,
@@ -515,7 +568,7 @@ impl Report {
     ) -> Result<ReportSection, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.report_id.clone();
-        crate::models::report_section::ReportSection::upsert_with_parent(
+        crate::models::report_section::ReportSection::upsert_with_parent_report(
             db,
             &auth.organization_id,
             &parent_field,

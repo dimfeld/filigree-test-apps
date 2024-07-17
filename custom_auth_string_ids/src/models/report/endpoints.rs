@@ -159,7 +159,7 @@ async fn update_child_report_section(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::report_section::ReportSection::update_one_with_parent(
+    let result = crate::models::report_section::ReportSection::update_one_with_parent_report(
         &state.db, &auth, &parent_id, &child_id, payload,
     )
     .await?;
@@ -172,7 +172,7 @@ async fn delete_child_report_section(
     auth: Authed,
     Path((parent_id, child_id)): Path<(ReportId, ReportSectionId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let deleted = crate::models::report_section::ReportSection::delete_with_parent(
+    let deleted = crate::models::report_section::ReportSection::delete_with_parent_report(
         &state.db, &auth, &parent_id, &child_id,
     )
     .await?;
@@ -340,8 +340,8 @@ mod test {
                 .iter()
                 .map(|o| o.id)
                 .collect::<Vec<_>>();
-
             let ids = serde_json::to_value(&ids).unwrap();
+
             assert_eq!(
                 result["report_section_ids"], ids,
                 "field report_section_ids"
@@ -662,6 +662,7 @@ mod test {
     }
 
     #[sqlx::test]
+
     async fn child_report_section(pool: sqlx::PgPool) {
         // Create a test object
         let (

@@ -8,6 +8,7 @@ use crate::models::post::PostId;
 pub fn make_create_payload(i: usize) -> ReactionCreatePayload {
     ReactionCreatePayload {
         id: None,
+
         typ: format!("Test object {i}"),
         post_id: <PostId as Default>::default(),
     }
@@ -19,6 +20,7 @@ pub fn make_create_payload(i: usize) -> ReactionCreatePayload {
 pub fn make_update_payload(i: usize) -> ReactionUpdatePayload {
     ReactionUpdatePayload {
         id: None,
+
         typ: format!("Test object {i}"),
         post_id: <PostId as Default>::default(),
     }

@@ -39,7 +39,7 @@ where
 {
     let storage = get_storage(state);
 
-    let id = id.unwrap_or_else(PostImageId::new);
+    let id = id.unwrap_or_else(|| PostImageId::new());
 
     let file_storage_key = key
         .unwrap_or_else(|| generate_object_key(auth, id, filename.as_deref().unwrap_or_default()));
@@ -68,7 +68,8 @@ where
     };
 
     let result =
-        PostImage::upsert_with_parent(tx, &auth.organization_id, &parent_id, &db_payload).await?;
+        PostImage::upsert_with_parent_post(tx, &auth.organization_id, &parent_id, &db_payload)
+            .await?;
 
     Ok(result)
 }
@@ -103,7 +104,7 @@ pub async fn upload(
     .await
     .change_context(Error::Upload)?;
 
-    let id = id.unwrap_or_else(PostImageId::new);
+    let id = id.unwrap_or_else(|| PostImageId::new());
 
     let file_storage_key = key
         .unwrap_or_else(|| generate_object_key(auth, id, filename.as_deref().unwrap_or_default()));
@@ -120,7 +121,8 @@ pub async fn upload(
     };
 
     let result =
-        PostImage::upsert_with_parent(tx, &auth.organization_id, &parent_id, &db_payload).await?;
+        PostImage::upsert_with_parent_post(tx, &auth.organization_id, &parent_id, &db_payload)
+            .await?;
 
     let storage = get_storage(state);
     storage
@@ -150,7 +152,7 @@ pub async fn delete_by_id(
     id: PostImageId,
 ) -> Result<bool, error_stack::Report<Error>> {
     let storage_key = get_storage_key_by_id(state, auth, &mut *tx, id).await?;
-    let deleted = PostImage::delete_with_parent(&mut *tx, auth, &parent_id, &id).await?;
+    let deleted = PostImage::delete_with_parent_post(&mut *tx, auth, &parent_id, &id).await?;
 
     if deleted {
         delete_by_key(state, &storage_key).await?;
@@ -168,8 +170,7 @@ pub async fn delete_by_parent_id(
 ) -> Result<bool, error_stack::Report<Error>> {
     let storage_keys = get_storage_keys_by_parent_id(state, auth, &mut *tx, parent_id).await?;
     let deleted =
-        PostImage::delete_all_children_of_parent(&mut *tx, &auth.organization_id, &parent_id)
-            .await?;
+        PostImage::delete_all_children_of_post(&mut *tx, &auth.organization_id, &parent_id).await?;
 
     if deleted {
         for key in storage_keys {

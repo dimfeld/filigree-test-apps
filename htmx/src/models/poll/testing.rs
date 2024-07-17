@@ -8,6 +8,7 @@ use crate::models::post::PostId;
 pub fn make_create_payload(i: usize) -> PollCreatePayload {
     PollCreatePayload {
         id: None,
+
         question: format!("Test object {i}"),
         answers: serde_json::json!({ "key": i }),
         post_id: <PostId as Default>::default(),
@@ -20,6 +21,7 @@ pub fn make_create_payload(i: usize) -> PollCreatePayload {
 pub fn make_update_payload(i: usize) -> PollUpdatePayload {
     PollUpdatePayload {
         id: None,
+
         question: format!("Test object {i}"),
         answers: serde_json::json!({ "key": i }),
         post_id: <PostId as Default>::default(),

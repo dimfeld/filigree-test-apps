@@ -1,9 +1,9 @@
 UPDATE
   public.roles
 SET
-  name = $2,
-  description = $3,
+  name = $1,
+  description = $2,
   updated_at = NOW()
 WHERE
-  id = $1
+  id = $3
   AND organization_id = $4

@@ -1,10 +1,10 @@
 UPDATE
   myapp.reports
 SET
-  title = $2,
-  description = $3,
-  ui = $4,
+  title = $1,
+  description = $2,
+  ui = $3,
   updated_at = NOW()
 WHERE
-  id = $1
+  id = $4
   AND organization_id = $5

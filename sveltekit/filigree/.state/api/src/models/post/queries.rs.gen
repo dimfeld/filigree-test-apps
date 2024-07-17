@@ -26,10 +26,12 @@ use crate::{
             PostImage, PostImageCreatePayload, PostImageCreateResult, PostImageId,
             PostImageUpdatePayload,
         },
+        post_tag::{PostTag, PostTagCreatePayload, PostTagUpdatePayload},
         reaction::{
             Reaction, ReactionCreatePayload, ReactionCreateResult, ReactionId,
             ReactionUpdatePayload,
         },
+        tag::{Tag, TagCreatePayload, TagCreateResult, TagId, TagUpdatePayload},
     },
     Error,
 };
@@ -161,6 +163,11 @@ type QueryAs<'q, T> = sqlx::query::QueryAs<
     <sqlx::Postgres as sqlx::database::HasArguments<'q>>::Arguments,
 >;
 
+#[derive(Default)]
+struct PostCreatePayloadChildrenResult {
+    tag: Option<TagId>,
+}
+
 impl Post {
     /// Get a Post from the database
     #[instrument(skip(db))]
@@ -285,7 +292,7 @@ impl Post {
     ) -> Result<PostCreateResult, error_stack::Report<Error>> {
         auth.require_permission(super::CREATE_PERMISSION)?;
 
-        let id = payload.id.unwrap_or_else(PostId::new);
+        let id = payload.id.unwrap_or_else(|| PostId::new());
 
         Self::create_raw(&mut *db, &id, &auth.organization_id, payload).await
     }
@@ -311,6 +318,50 @@ impl Post {
         .await
         .change_context(Error::Db)?;
 
+        let child_result =
+            Self::create_payload_children(&mut *db, id, organization_id, payload).await?;
+
+        let result = PostCreateResult {
+            id: result.id,
+            organization_id: result.organization_id,
+            updated_at: result.updated_at,
+            created_at: result.created_at,
+            subject: result.subject,
+            body: result.body,
+            tag: child_result.tag,
+        };
+
+        Ok(result)
+    }
+
+    async fn create_payload_children(
+        db: &mut PgConnection,
+        parent_id: &PostId,
+        organization_id: &OrganizationId,
+        payload: PostCreatePayload,
+    ) -> Result<PostCreatePayloadChildrenResult, error_stack::Report<Error>> {
+        let tag_result = if let Some(mut children) = payload.tag {
+            tracing::event!(Level::DEBUG, ?children, "Creating child tag");
+
+            let child_struct = PostTagUpdatePayload {
+                post_id: Some(parent_id.clone()),
+                tag_id: Some(children),
+            };
+
+            let result = PostTag::upsert_with_parent_post(
+                &mut *db,
+                organization_id,
+                parent_id,
+                &child_struct,
+            )
+            .await?;
+            Some(result.tag_id)
+        } else {
+            None
+        };
+
+        let result = PostCreatePayloadChildrenResult { tag: tag_result };
+
         Ok(result)
     }
 
@@ -325,9 +376,9 @@ impl Post {
 
         let result = query_file_scalar!(
             "src/models/post/update.sql",
-            id.as_uuid(),
             &payload.subject as _,
             &payload.body as _,
+            id.as_uuid(),
             auth.organization_id.as_uuid()
         )
         .execute(&mut *db)
@@ -338,7 +389,33 @@ impl Post {
             return Ok(false);
         }
 
+        Self::update_payload_children(&mut *db, &auth.organization_id, id, payload).await?;
+
         Ok(true)
+    }
+
+    async fn update_payload_children(
+        db: &mut PgConnection,
+        organization_id: &OrganizationId,
+        parent_id: &PostId,
+        payload: PostUpdatePayload,
+    ) -> Result<(), error_stack::Report<Error>> {
+        if let Some(mut children) = payload.tag {
+            if let Some(child_id) = children {
+                let child = PostTagUpdatePayload {
+                    post_id: Some(parent_id.clone()),
+                    tag_id: Some(child_id),
+                };
+
+                PostTag::upsert_with_parent_post(&mut *db, organization_id, parent_id, &child)
+                    .await?;
+            } else {
+                // Remove the link since the child ID was cleared
+                PostTag::delete_all_children_of_post(&mut *db, organization_id, parent_id).await?;
+            }
+        }
+
+        Ok(())
     }
 
     #[instrument(skip(db))]
@@ -413,7 +490,9 @@ impl Post {
         payload: CommentCreatePayload,
     ) -> Result<CommentCreateResult, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
-        let id = payload.id.clone().unwrap_or_else(CommentId::new);
+
+        let id = payload.id.clone().unwrap_or_else(|| CommentId::new());
+
         crate::models::comment::Comment::create_raw(db, &id, &auth.organization_id, payload).await
     }
 
@@ -425,7 +504,7 @@ impl Post {
     ) -> Result<bool, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::comment::Comment::update_one_with_parent(
+        crate::models::comment::Comment::update_one_with_parent_post(
             db,
             auth,
             &parent_field,
@@ -442,7 +521,7 @@ impl Post {
     ) -> Result<Comment, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::comment::Comment::upsert_with_parent(
+        crate::models::comment::Comment::upsert_with_parent_post(
             db,
             &auth.organization_id,
             &parent_field,
@@ -474,7 +553,9 @@ impl Post {
         payload: ReactionCreatePayload,
     ) -> Result<ReactionCreateResult, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
-        let id = payload.id.clone().unwrap_or_else(ReactionId::new);
+
+        let id = payload.id.clone().unwrap_or_else(|| ReactionId::new());
+
         crate::models::reaction::Reaction::create_raw(db, &id, &auth.organization_id, payload).await
     }
 
@@ -486,7 +567,7 @@ impl Post {
     ) -> Result<bool, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::reaction::Reaction::update_one_with_parent(
+        crate::models::reaction::Reaction::update_one_with_parent_post(
             db,
             auth,
             &parent_field,
@@ -503,7 +584,7 @@ impl Post {
     ) -> Result<Reaction, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::reaction::Reaction::upsert_with_parent(
+        crate::models::reaction::Reaction::upsert_with_parent_post(
             db,
             &auth.organization_id,
             &parent_field,
@@ -536,7 +617,7 @@ impl Post {
     ) -> Result<Poll, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::poll::Poll::upsert_with_parent(
+        crate::models::poll::Poll::upsert_with_parent_post(
             db,
             &auth.organization_id,
             &parent_field,
@@ -568,7 +649,9 @@ impl Post {
         payload: PostImageCreatePayload,
     ) -> Result<PostImageCreateResult, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
-        let id = payload.id.clone().unwrap_or_else(PostImageId::new);
+
+        let id = payload.id.clone().unwrap_or_else(|| PostImageId::new());
+
         crate::models::post_image::PostImage::create_raw(db, &id, &auth.organization_id, payload)
             .await
     }
@@ -581,7 +664,7 @@ impl Post {
     ) -> Result<bool, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::post_image::PostImage::update_one_with_parent(
+        crate::models::post_image::PostImage::update_one_with_parent_post(
             db,
             auth,
             &parent_field,
@@ -598,7 +681,7 @@ impl Post {
     ) -> Result<PostImage, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::post_image::PostImage::upsert_with_parent(
+        crate::models::post_image::PostImage::upsert_with_parent_post(
             db,
             &auth.organization_id,
             &parent_field,

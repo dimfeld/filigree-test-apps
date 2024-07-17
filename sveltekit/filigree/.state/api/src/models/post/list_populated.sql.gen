@@ -7,21 +7,30 @@ SELECT
   body,
   (
     SELECT
-      COALESCE(ARRAY_AGG(comments.id), ARRAY[]::uuid[])
+      COALESCE(ARRAY_AGG(ct.id), ARRAY[]::uuid[])
     FROM
-      public.comments
+      public.comments ct
     WHERE
-      post_id = tb.id
+      ct.post_id = tb.id
       AND organization_id = $1) AS "comment_ids",
   (
     SELECT
-      polls.id
+      ct.id
     FROM
-      public.polls
+      public.polls ct
     WHERE
-      post_id = tb.id
+      ct.post_id = tb.id
       AND organization_id = $1
-    LIMIT 1) AS "poll_id"
+    LIMIT 1) AS "poll_id",
+(
+  SELECT
+    ct.tag_id
+  FROM
+    public.post_tags ct
+  WHERE
+    ct.post_id = tb.id
+    AND organization_id = $1
+  LIMIT 1) AS "tag_id"
 FROM
   public.posts tb
 WHERE

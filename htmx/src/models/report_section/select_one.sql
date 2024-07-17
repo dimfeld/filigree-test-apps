@@ -10,5 +10,5 @@ SELECT
 FROM
   public.report_sections tb
 WHERE
-  tb.id = $1
+  id = $1
   AND tb.organization_id = $2

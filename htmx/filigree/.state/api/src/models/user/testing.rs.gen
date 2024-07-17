@@ -7,6 +7,7 @@ use super::{UserCreatePayload, UserId, UserUpdatePayload};
 pub fn make_create_payload(i: usize) -> UserCreatePayload {
     UserCreatePayload {
         id: None,
+
         name: format!("Test object {i}"),
         email: (i > 1).then(|| format!("Test object {i}")),
         avatar_url: (i > 1).then(|| format!("Test object {i}")),
@@ -19,6 +20,7 @@ pub fn make_create_payload(i: usize) -> UserCreatePayload {
 pub fn make_update_payload(i: usize) -> UserUpdatePayload {
     UserUpdatePayload {
         id: None,
+
         name: format!("Test object {i}"),
         email: Some(format!("Test object {i}")),
         avatar_url: Some(format!("Test object {i}")),

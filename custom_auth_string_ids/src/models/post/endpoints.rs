@@ -176,7 +176,7 @@ async fn update_child_comment(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::comment::Comment::update_one_with_parent(
+    let result = crate::models::comment::Comment::update_one_with_parent_post(
         &state.db, &auth, &parent_id, &child_id, payload,
     )
     .await?;
@@ -189,7 +189,7 @@ async fn delete_child_comment(
     auth: Authed,
     Path((parent_id, child_id)): Path<(PostId, CommentId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let deleted = crate::models::comment::Comment::delete_with_parent(
+    let deleted = crate::models::comment::Comment::delete_with_parent_post(
         &state.db, &auth, &parent_id, &child_id,
     )
     .await?;
@@ -259,7 +259,7 @@ async fn update_child_reaction(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::reaction::Reaction::update_one_with_parent(
+    let result = crate::models::reaction::Reaction::update_one_with_parent_post(
         &state.db, &auth, &parent_id, &child_id, payload,
     )
     .await?;
@@ -272,7 +272,7 @@ async fn delete_child_reaction(
     auth: Authed,
     Path((parent_id, child_id)): Path<(PostId, ReactionId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let deleted = crate::models::reaction::Reaction::delete_with_parent(
+    let deleted = crate::models::reaction::Reaction::delete_with_parent_post(
         &state.db, &auth, &parent_id, &child_id,
     )
     .await?;
@@ -313,7 +313,7 @@ async fn upsert_child_poll(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let result = crate::models::poll::Poll::upsert_with_parent(
+    let result = crate::models::poll::Poll::upsert_with_parent_post(
         &state.db,
         &auth.organization_id,
         &parent_id,
@@ -335,7 +335,7 @@ async fn delete_child_poll(
 
     object_perm.must_be_writable(WRITE_PERMISSION)?;
 
-    let deleted = crate::models::poll::Poll::delete_all_children_of_parent(
+    let deleted = crate::models::poll::Poll::delete_all_children_of_post(
         &state.db,
         &auth.organization_id,
         &parent_id,
@@ -964,6 +964,7 @@ mod test {
     }
 
     #[sqlx::test]
+
     async fn child_comment(pool: sqlx::PgPool) {
         // Create a test object
         let (
@@ -1212,6 +1213,7 @@ mod test {
     }
 
     #[sqlx::test]
+
     async fn child_reaction(pool: sqlx::PgPool) {
         // Create a test object
         let (
@@ -1460,6 +1462,7 @@ mod test {
     }
 
     #[sqlx::test]
+
     async fn child_poll(pool: sqlx::PgPool) {
         // Create a test object
         let (

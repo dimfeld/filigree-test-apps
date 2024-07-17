@@ -285,7 +285,7 @@ impl Post {
     ) -> Result<PostCreateResult, error_stack::Report<Error>> {
         auth.require_permission(super::CREATE_PERMISSION)?;
 
-        let id = payload.id.unwrap_or_else(PostId::new);
+        let id = payload.id.unwrap_or_else(|| PostId::new());
 
         Self::create_raw(&mut *db, &id, &auth.organization_id, payload).await
     }
@@ -325,9 +325,9 @@ impl Post {
 
         let result = query_file_scalar!(
             "src/models/post/update.sql",
-            id.as_uuid(),
             &payload.subject as _,
             &payload.body as _,
+            id.as_uuid(),
             auth.organization_id.as_str()
         )
         .execute(&mut *db)
@@ -413,7 +413,9 @@ impl Post {
         payload: CommentCreatePayload,
     ) -> Result<CommentCreateResult, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
-        let id = payload.id.clone().unwrap_or_else(CommentId::new);
+
+        let id = payload.id.clone().unwrap_or_else(|| CommentId::new());
+
         crate::models::comment::Comment::create_raw(db, &id, &auth.organization_id, payload).await
     }
 
@@ -425,7 +427,7 @@ impl Post {
     ) -> Result<bool, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::comment::Comment::update_one_with_parent(
+        crate::models::comment::Comment::update_one_with_parent_post(
             db,
             auth,
             &parent_field,
@@ -442,7 +444,7 @@ impl Post {
     ) -> Result<Comment, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::comment::Comment::upsert_with_parent(
+        crate::models::comment::Comment::upsert_with_parent_post(
             db,
             &auth.organization_id,
             &parent_field,
@@ -474,7 +476,9 @@ impl Post {
         payload: ReactionCreatePayload,
     ) -> Result<ReactionCreateResult, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
-        let id = payload.id.clone().unwrap_or_else(ReactionId::new);
+
+        let id = payload.id.clone().unwrap_or_else(|| ReactionId::new());
+
         crate::models::reaction::Reaction::create_raw(db, &id, &auth.organization_id, payload).await
     }
 
@@ -486,7 +490,7 @@ impl Post {
     ) -> Result<bool, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::reaction::Reaction::update_one_with_parent(
+        crate::models::reaction::Reaction::update_one_with_parent_post(
             db,
             auth,
             &parent_field,
@@ -503,7 +507,7 @@ impl Post {
     ) -> Result<Reaction, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::reaction::Reaction::upsert_with_parent(
+        crate::models::reaction::Reaction::upsert_with_parent_post(
             db,
             &auth.organization_id,
             &parent_field,
@@ -536,7 +540,7 @@ impl Post {
     ) -> Result<Poll, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::poll::Poll::upsert_with_parent(
+        crate::models::poll::Poll::upsert_with_parent_post(
             db,
             &auth.organization_id,
             &parent_field,
@@ -568,7 +572,9 @@ impl Post {
         payload: PostImageCreatePayload,
     ) -> Result<PostImageCreateResult, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
-        let id = payload.id.clone().unwrap_or_else(PostImageId::new);
+
+        let id = payload.id.clone().unwrap_or_else(|| PostImageId::new());
+
         crate::models::post_image::PostImage::create_raw(db, &id, &auth.organization_id, payload)
             .await
     }
@@ -581,7 +587,7 @@ impl Post {
     ) -> Result<bool, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::post_image::PostImage::update_one_with_parent(
+        crate::models::post_image::PostImage::update_one_with_parent_post(
             db,
             auth,
             &parent_field,
@@ -598,7 +604,7 @@ impl Post {
     ) -> Result<PostImage, error_stack::Report<Error>> {
         auth.require_permission(super::WRITE_PERMISSION)?;
         let parent_field = payload.post_id.clone();
-        crate::models::post_image::PostImage::upsert_with_parent(
+        crate::models::post_image::PostImage::upsert_with_parent_post(
             db,
             &auth.organization_id,
             &parent_field,

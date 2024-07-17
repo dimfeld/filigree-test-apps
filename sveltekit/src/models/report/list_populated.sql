@@ -8,12 +8,20 @@ SELECT
   ui,
   (
     SELECT
-      COALESCE(ARRAY_AGG(report_sections.id), ARRAY[]::uuid[])
+      COALESCE(ARRAY_AGG(ct.id), ARRAY[]::uuid[])
     FROM
-      public.report_sections
+      public.report_sections ct
     WHERE
-      report_id = tb.id
-      AND organization_id = $1) AS "report_section_ids"
+      ct.report_id = tb.id
+      AND organization_id = $1) AS "report_section_ids",
+  (
+    SELECT
+      COALESCE(ARRAY_AGG(ct.tag_id), ARRAY[]::uuid[])
+    FROM
+      public.report_tags ct
+    WHERE
+      ct.report_id = tb.id
+      AND organization_id = $1) AS "tag_ids"
 FROM
   public.reports tb
 WHERE

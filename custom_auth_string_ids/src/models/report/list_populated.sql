@@ -8,11 +8,11 @@ SELECT
   ui,
   (
     SELECT
-      COALESCE(ARRAY_AGG(report_sections.id), ARRAY[]::uuid[])
+      COALESCE(ARRAY_AGG(ct.id), ARRAY[]::uuid[])
     FROM
-      myapp.report_sections
+      myapp.report_sections ct
     WHERE
-      report_id = tb.id
+      ct.report_id = tb.id
       AND organization_id = $1) AS "report_section_ids"
 FROM
   myapp.reports tb

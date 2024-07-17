@@ -1,9 +1,9 @@
 UPDATE
   myapp.posts
 SET
-  subject = $2,
-  body = $3,
+  subject = $1,
+  body = $2,
   updated_at = NOW()
 WHERE
-  id = $1
+  id = $3
   AND organization_id = $4
