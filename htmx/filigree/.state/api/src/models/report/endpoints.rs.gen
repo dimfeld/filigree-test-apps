@@ -23,7 +23,8 @@ use super::{
 use crate::{
     auth::{has_any_permission, Authed},
     models::report_section::{
-        ReportSection, ReportSectionCreatePayload, ReportSectionId, ReportSectionUpdatePayload,
+        ReportSection, ReportSectionCreatePayload, ReportSectionCreateResult, ReportSectionId,
+        ReportSectionUpdatePayload,
     },
     server::ServerState,
     Error,

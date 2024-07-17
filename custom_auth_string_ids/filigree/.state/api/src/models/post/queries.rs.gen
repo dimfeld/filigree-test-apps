@@ -17,11 +17,19 @@ use super::{types::*, PostId};
 use crate::{
     auth::AuthInfo,
     models::{
-        comment::{Comment, CommentCreatePayload, CommentId, CommentUpdatePayload},
+        comment::{
+            Comment, CommentCreatePayload, CommentCreateResult, CommentId, CommentUpdatePayload,
+        },
         organization::OrganizationId,
-        poll::{Poll, PollCreatePayload, PollId, PollUpdatePayload},
-        post_image::{PostImage, PostImageCreatePayload, PostImageId, PostImageUpdatePayload},
-        reaction::{Reaction, ReactionCreatePayload, ReactionId, ReactionUpdatePayload},
+        poll::{Poll, PollCreatePayload, PollCreateResult, PollId, PollUpdatePayload},
+        post_image::{
+            PostImage, PostImageCreatePayload, PostImageCreateResult, PostImageId,
+            PostImageUpdatePayload,
+        },
+        reaction::{
+            Reaction, ReactionCreatePayload, ReactionCreateResult, ReactionId,
+            ReactionUpdatePayload,
+        },
     },
     Error,
 };
@@ -380,5 +388,222 @@ impl Post {
         } else {
             return Ok(None);
         }
+    }
+
+    pub async fn get_child_comments_for_parent(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        parent_id: &PostId,
+    ) -> Result<Vec<Comment>, error_stack::Report<Error>> {
+        auth.require_permission(super::READ_PERMISSION)?;
+
+        let filters = crate::models::comment::queries::ListQueryFilters {
+            per_page: Some(131072),
+            post_id: vec![parent_id.clone()],
+            ..Default::default()
+        };
+        let result = crate::models::comment::Comment::list(db, auth, &filters).await?;
+
+        Ok(result)
+    }
+
+    pub async fn create_child_comment(
+        db: &mut PgConnection,
+        auth: &AuthInfo,
+        payload: CommentCreatePayload,
+    ) -> Result<CommentCreateResult, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let id = payload.id.clone().unwrap_or_else(CommentId::new);
+        crate::models::comment::Comment::create_raw(db, &id, &auth.organization_id, payload).await
+    }
+
+    pub async fn update_child_comment(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        id: &CommentId,
+        payload: CommentUpdatePayload,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let parent_field = payload.post_id.clone();
+        crate::models::comment::Comment::update_one_with_parent(
+            db,
+            auth,
+            &parent_field,
+            id,
+            payload,
+        )
+        .await
+    }
+
+    pub async fn upsert_child_comment(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        payload: &CommentUpdatePayload,
+    ) -> Result<Comment, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let parent_field = payload.post_id.clone();
+        crate::models::comment::Comment::upsert_with_parent(
+            db,
+            &auth.organization_id,
+            &parent_field,
+            payload,
+        )
+        .await
+    }
+
+    pub async fn get_child_reactions_for_parent(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        parent_id: &PostId,
+    ) -> Result<Vec<Reaction>, error_stack::Report<Error>> {
+        auth.require_permission(super::READ_PERMISSION)?;
+
+        let filters = crate::models::reaction::queries::ListQueryFilters {
+            per_page: Some(131072),
+            post_id: vec![parent_id.clone()],
+            ..Default::default()
+        };
+        let result = crate::models::reaction::Reaction::list(db, auth, &filters).await?;
+
+        Ok(result)
+    }
+
+    pub async fn create_child_reaction(
+        db: &mut PgConnection,
+        auth: &AuthInfo,
+        payload: ReactionCreatePayload,
+    ) -> Result<ReactionCreateResult, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let id = payload.id.clone().unwrap_or_else(ReactionId::new);
+        crate::models::reaction::Reaction::create_raw(db, &id, &auth.organization_id, payload).await
+    }
+
+    pub async fn update_child_reaction(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        id: &ReactionId,
+        payload: ReactionUpdatePayload,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let parent_field = payload.post_id.clone();
+        crate::models::reaction::Reaction::update_one_with_parent(
+            db,
+            auth,
+            &parent_field,
+            id,
+            payload,
+        )
+        .await
+    }
+
+    pub async fn upsert_child_reaction(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        payload: &ReactionUpdatePayload,
+    ) -> Result<Reaction, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let parent_field = payload.post_id.clone();
+        crate::models::reaction::Reaction::upsert_with_parent(
+            db,
+            &auth.organization_id,
+            &parent_field,
+            payload,
+        )
+        .await
+    }
+
+    pub async fn get_child_poll_for_parent(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        parent_id: &PostId,
+    ) -> Result<Option<Poll>, error_stack::Report<Error>> {
+        auth.require_permission(super::READ_PERMISSION)?;
+
+        let filters = crate::models::poll::queries::ListQueryFilters {
+            per_page: Some(1),
+            post_id: vec![parent_id.clone()],
+            ..Default::default()
+        };
+        let mut result = crate::models::poll::Poll::list(db, auth, &filters).await?;
+
+        Ok(result.pop())
+    }
+
+    pub async fn upsert_child_poll(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        payload: &PollUpdatePayload,
+    ) -> Result<Poll, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let parent_field = payload.post_id.clone();
+        crate::models::poll::Poll::upsert_with_parent(
+            db,
+            &auth.organization_id,
+            &parent_field,
+            payload,
+        )
+        .await
+    }
+
+    pub async fn get_child_post_images_for_parent(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        parent_id: &PostId,
+    ) -> Result<Vec<PostImage>, error_stack::Report<Error>> {
+        auth.require_permission(super::READ_PERMISSION)?;
+
+        let filters = crate::models::post_image::queries::ListQueryFilters {
+            per_page: Some(131072),
+            post_id: vec![parent_id.clone()],
+            ..Default::default()
+        };
+        let result = crate::models::post_image::PostImage::list(db, auth, &filters).await?;
+
+        Ok(result)
+    }
+
+    pub async fn create_child_post_image(
+        db: &mut PgConnection,
+        auth: &AuthInfo,
+        payload: PostImageCreatePayload,
+    ) -> Result<PostImageCreateResult, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let id = payload.id.clone().unwrap_or_else(PostImageId::new);
+        crate::models::post_image::PostImage::create_raw(db, &id, &auth.organization_id, payload)
+            .await
+    }
+
+    pub async fn update_child_post_image(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        id: &PostImageId,
+        payload: PostImageUpdatePayload,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let parent_field = payload.post_id.clone();
+        crate::models::post_image::PostImage::update_one_with_parent(
+            db,
+            auth,
+            &parent_field,
+            id,
+            payload,
+        )
+        .await
+    }
+
+    pub async fn upsert_child_post_image(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        payload: &PostImageUpdatePayload,
+    ) -> Result<PostImage, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let parent_field = payload.post_id.clone();
+        crate::models::post_image::PostImage::upsert_with_parent(
+            db,
+            &auth.organization_id,
+            &parent_field,
+            payload,
+        )
+        .await
     }
 }

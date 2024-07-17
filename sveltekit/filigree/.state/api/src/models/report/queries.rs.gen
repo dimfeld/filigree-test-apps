@@ -19,7 +19,8 @@ use crate::{
     models::{
         organization::OrganizationId,
         report_section::{
-            ReportSection, ReportSectionCreatePayload, ReportSectionId, ReportSectionUpdatePayload,
+            ReportSection, ReportSectionCreatePayload, ReportSectionCreateResult, ReportSectionId,
+            ReportSectionUpdatePayload,
         },
     },
     Error,
@@ -454,5 +455,72 @@ impl Report {
         } else {
             return Ok(None);
         }
+    }
+
+    pub async fn get_child_report_sections_for_parent(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        parent_id: &ReportId,
+    ) -> Result<Vec<ReportSection>, error_stack::Report<Error>> {
+        auth.require_permission(super::READ_PERMISSION)?;
+
+        let filters = crate::models::report_section::queries::ListQueryFilters {
+            per_page: Some(131072),
+            report_id: vec![parent_id.clone()],
+            ..Default::default()
+        };
+        let result = crate::models::report_section::ReportSection::list(db, auth, &filters).await?;
+
+        Ok(result)
+    }
+
+    pub async fn create_child_report_section(
+        db: &mut PgConnection,
+        auth: &AuthInfo,
+        payload: ReportSectionCreatePayload,
+    ) -> Result<ReportSectionCreateResult, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let id = payload.id.clone().unwrap_or_else(ReportSectionId::new);
+        crate::models::report_section::ReportSection::create_raw(
+            db,
+            &id,
+            &auth.organization_id,
+            payload,
+        )
+        .await
+    }
+
+    pub async fn update_child_report_section(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        id: &ReportSectionId,
+        payload: ReportSectionUpdatePayload,
+    ) -> Result<bool, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let parent_field = payload.report_id.clone();
+        crate::models::report_section::ReportSection::update_one_with_parent(
+            db,
+            auth,
+            &parent_field,
+            id,
+            payload,
+        )
+        .await
+    }
+
+    pub async fn upsert_child_report_section(
+        db: impl PgExecutor<'_>,
+        auth: &AuthInfo,
+        payload: &ReportSectionUpdatePayload,
+    ) -> Result<ReportSection, error_stack::Report<Error>> {
+        auth.require_permission(super::WRITE_PERMISSION)?;
+        let parent_field = payload.report_id.clone();
+        crate::models::report_section::ReportSection::upsert_with_parent(
+            db,
+            &auth.organization_id,
+            &parent_field,
+            payload,
+        )
+        .await
     }
 }

@@ -10,7 +10,8 @@ use super::ReportId;
 use crate::models::{
     organization::OrganizationId,
     report_section::{
-        ReportSection, ReportSectionCreatePayload, ReportSectionId, ReportSectionUpdatePayload,
+        ReportSection, ReportSectionCreatePayload, ReportSectionCreateResult, ReportSectionId,
+        ReportSectionUpdatePayload,
     },
 };
 

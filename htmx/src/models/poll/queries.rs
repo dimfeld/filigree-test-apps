@@ -367,7 +367,8 @@ impl Poll {
         }
     }
 
-    /// Update or insert a child of the given parent.
+    /// Update or insert the child of the given parent. Since there can only be a single child per
+    /// parent, this ignores the `id` field of the payload, and only looks at the parent ID.
 
     #[instrument(skip(db))]
     pub async fn upsert_with_parent(
@@ -390,93 +391,6 @@ impl Poll {
         .fetch_one(db)
         .await;
         Self::check_missing_parent_error(result)
-    }
-
-    /// Update a single child of the given parent. This does nothing if the child doesn't exist.
-    #[instrument(skip(db))]
-    pub async fn update_one_with_parent(
-        db: impl PgExecutor<'_>,
-        auth: &AuthInfo,
-        parent_id: &PostId,
-        id: &PollId,
-        mut payload: PollUpdatePayload,
-    ) -> Result<bool, error_stack::Report<Error>> {
-        payload.post_id = parent_id.clone();
-
-        let actor_ids = auth.actor_ids();
-        let result = query_file!(
-            "src/models/poll/update_one_with_parent.sql",
-            id.as_uuid(),
-            &payload.question as _,
-            &payload.answers as _,
-            &payload.post_id as _,
-            parent_id.as_uuid(),
-            auth.organization_id.as_uuid()
-        )
-        .execute(db)
-        .await
-        .change_context(Error::Db)?;
-
-        Ok(result.rows_affected() > 0)
-    }
-
-    /// Update the children of the given parent.
-    /// Insert new values that are not yet in the database and
-    /// delete existing values that are not in the payload.
-    #[instrument(skip(db))]
-    pub async fn update_all_with_parent(
-        db: &mut PgConnection,
-        organization_id: &OrganizationId,
-        parent_id: &PostId,
-        payload: &[PollUpdatePayload],
-    ) -> Result<Vec<Poll>, error_stack::Report<Error>> {
-        if payload.is_empty() {
-            Self::delete_all_children_of_parent(db, organization_id, parent_id).await?;
-            Ok(Vec::new())
-        } else {
-            // First, we upsert the existing children.
-            let q = include_str!("upsert_children.sql");
-            let bindings = ValuesBuilder {
-                first_parameter: 3,
-                num_values: payload.len(),
-                num_columns: 2 + 3,
-            };
-            let q = q.replace("__insertion_point_insert_values", &bindings.to_string());
-
-            let mut query = sqlx::query_as::<_, Poll>(q.as_str());
-
-            query = query.bind(organization_id).bind(parent_id.as_uuid());
-
-            for p in payload {
-                let id = p.id.unwrap_or_else(|| PollId::new());
-                query = query
-                    .bind(id)
-                    .bind(organization_id)
-                    .bind(&p.question)
-                    .bind(&p.answers)
-                    .bind(&p.post_id)
-            }
-
-            let results = query.fetch_all(&mut *db).await;
-            let results = Self::check_missing_parent_error(results)?;
-
-            // Delete any of the children that were not sent in.
-            let ids = results
-                .iter()
-                .map(|o| o.id.as_uuid().clone())
-                .collect::<Vec<_>>();
-            query_file!(
-                "src/models/poll/delete_removed_children.sql",
-                organization_id.as_uuid(),
-                parent_id.as_uuid(),
-                &ids
-            )
-            .execute(db)
-            .await
-            .change_context(Error::Db)?;
-
-            Ok(results)
-        }
     }
 
     /// Delete a child object, making sure that its parent ID matches.

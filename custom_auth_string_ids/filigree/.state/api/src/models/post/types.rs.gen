@@ -8,11 +8,18 @@ use sqlx_transparent_json_decode::sqlx_json_decode;
 
 use super::PostId;
 use crate::models::{
-    comment::{Comment, CommentCreatePayload, CommentId, CommentUpdatePayload},
+    comment::{
+        Comment, CommentCreatePayload, CommentCreateResult, CommentId, CommentUpdatePayload,
+    },
     organization::OrganizationId,
-    poll::{Poll, PollCreatePayload, PollId, PollUpdatePayload},
-    post_image::{PostImage, PostImageCreatePayload, PostImageId, PostImageUpdatePayload},
-    reaction::{Reaction, ReactionCreatePayload, ReactionId, ReactionUpdatePayload},
+    poll::{Poll, PollCreatePayload, PollCreateResult, PollId, PollUpdatePayload},
+    post_image::{
+        PostImage, PostImageCreatePayload, PostImageCreateResult, PostImageId,
+        PostImageUpdatePayload,
+    },
+    reaction::{
+        Reaction, ReactionCreatePayload, ReactionCreateResult, ReactionId, ReactionUpdatePayload,
+    },
 };
 
 #[derive(Deserialize, Debug, Clone, schemars::JsonSchema, sqlx::FromRow, Serialize)]
